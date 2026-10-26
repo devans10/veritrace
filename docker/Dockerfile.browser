@@ -1,0 +1,10 @@
+# Sandboxed capture service. Pinned Playwright; runs as non-root pwuser so the
+# Chromium sandbox stays enabled (requires docker/browser/seccomp_profile.json).
+FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
+ENV PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1
+COPY services/browser/requirements.txt /srv/requirements.txt
+RUN pip install -r /srv/requirements.txt
+COPY services/browser/app.py /srv/app.py
+WORKDIR /srv
+USER pwuser
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "3000", "--no-server-header"]

@@ -1,0 +1,99 @@
+"""Builds provider implementations from settings. The only place that names concrete impls."""
+
+from __future__ import annotations
+
+from functools import lru_cache
+
+from provcheck.config import Settings, get_settings
+from provcheck.core.interfaces import ArchiveProvider, BrowserCapture, ObjectStore, Queue
+from provcheck.core.providers.archive import NullArchive, WaybackArchive
+from provcheck.core.providers.browser import HTTPBrowserCapture
+from provcheck.core.providers.objectstore import MemoryObjectStore, S3ObjectStore
+from provcheck.core.providers.queue import InlineQueue, RQJobQueue
+from provcheck.core.security.ssrf import SafeFetcher, URLPolicy
+
+
+def build_object_store(s: Settings) -> ObjectStore:
+    if s.object_store == "memory":
+        return MemoryObjectStore()
+    return S3ObjectStore(
+        endpoint=s.s3_endpoint,
+        access_key=s.s3_access_key.get_secret_value(),
+        secret_key=s.s3_secret_key.get_secret_value(),
+        bucket=s.s3_bucket,
+        secure=s.s3_secure,
+        region=s.s3_region,
+    )
+
+
+def build_queue(s: Settings) -> Queue:
+    if s.queue == "inline":
+        from provcheck.services.worker.tasks import run_task
+
+        return InlineQueue(runner=run_task)
+    return RQJobQueue(s.redis_url)
+
+
+def build_browser(s: Settings) -> BrowserCapture:
+    return HTTPBrowserCapture(s.browser_url, timeout_s=s.browser_timeout_s)
+
+
+def build_archive(s: Settings) -> ArchiveProvider:
+    if s.archive_provider == "none":
+        return NullArchive()
+    return WaybackArchive(
+        base_url=s.wayback_base_url,
+        access_key=s.ia_s3_access_key.get_secret_value(),
+        secret_key=s.ia_s3_secret_key.get_secret_value(),
+    )
+
+
+def build_fetcher(s: Settings) -> SafeFetcher:
+    return SafeFetcher(
+        URLPolicy.from_settings(s),
+        proxy_url=s.egress_proxy_url,
+        timeout_s=s.fetch_timeout_s,
+        max_bytes=s.fetch_max_bytes,
+        max_redirects=s.fetch_max_redirects,
+    )
+
+
+class Providers:
+    """Lazily-built provider set; tests replace attributes with fakes."""
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self._cache: dict[str, object] = {}
+
+    def _get(self, key: str, factory: object) -> object:
+        if key not in self._cache:
+            self._cache[key] = factory(self.settings)  # type: ignore[operator]
+        return self._cache[key]
+
+    @property
+    def object_store(self) -> ObjectStore:
+        return self._get("object_store", build_object_store)  # type: ignore[return-value]
+
+    @property
+    def queue(self) -> Queue:
+        return self._get("queue", build_queue)  # type: ignore[return-value]
+
+    @property
+    def browser(self) -> BrowserCapture:
+        return self._get("browser", build_browser)  # type: ignore[return-value]
+
+    @property
+    def archive(self) -> ArchiveProvider:
+        return self._get("archive", build_archive)  # type: ignore[return-value]
+
+    @property
+    def fetcher(self) -> SafeFetcher:
+        return self._get("fetcher", build_fetcher)  # type: ignore[return-value]
+
+    def override(self, **impls: object) -> None:
+        self._cache.update(impls)
+
+
+@lru_cache(maxsize=1)
+def get_providers() -> Providers:
+    return Providers(get_settings())
