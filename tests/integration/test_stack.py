@@ -89,13 +89,41 @@ def test_audit_chain_for_case():
     d = httpx.get(f"{API}/v1/cases/{case['id']}/audit").json()
     assert d["entries_valid"] and d["chain_valid"], d["chain_detail"]
     events = [e["event_type"] for e in d["entries"]]
-    assert events == [
+    # Pipeline (dev stack uses fake LLM/factcheck): capture → extract → investigate → complete.
+    expected = [
         "case.created",
         "stage.started",
         "capture.stored",
         "archive.requested",
         "stage.transition",
+        "stage.started",
+        "extract.completed",
+        "stage.transition",
+        "investigators.fan_out",
+        "investigator.started",
+        "investigator.finished",
+        "stage.transition",
     ]
+    assert events == expected, events
+
+
+def test_text_submission_skips_capture_and_completes():
+    r = httpx.post(
+        f"{API}/v1/cases",
+        json={"text": "This is a test submission about an event in 2026.", "refresh": True},
+        timeout=30,
+    )
+    assert r.status_code in (200, 202), r.text
+    case = wait(r.json()["id"])
+    assert case["status"] == "complete", case["error"]
+    assert case["input_type"] == "text"
+    assert case["captures"] == []
+    d = httpx.get(f"{API}/v1/cases/{case['id']}/audit").json()
+    assert d["entries_valid"] and d["chain_valid"]
+    events = [e["event_type"] for e in d["entries"]]
+    assert events[0] == "case.created"
+    assert "extract.completed" in events
+    assert events[-1] == "stage.transition"
 
 
 @pytest.mark.parametrize(

@@ -32,6 +32,21 @@ x-app-env: &app-env
   ARCHIVE_SAVE_ENABLED: ${ARCHIVE_SAVE_ENABLED:-true}
   IA_S3_ACCESS_KEY: ${IA_S3_ACCESS_KEY:-}
   IA_S3_SECRET_KEY: ${IA_S3_SECRET_KEY:-}
+  LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+  LLM_PROMPT_CACHE: ${LLM_PROMPT_CACHE:-true}
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  LLM_MODEL: ${LLM_MODEL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  EMBED_PROVIDER: ${EMBED_PROVIDER:-voyage}
+  EMBED_MODEL: ${EMBED_MODEL:-voyage-3}
+  EMBED_DIM: ${EMBED_DIM:-1024}
+  VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+  SEARCH_PROVIDER: ${SEARCH_PROVIDER:-searxng}
+  SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
+  FACTCHECK_PROVIDER: ${FACTCHECK_PROVIDER:-none}
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
 
 x-app: &app
   image: provcheck-app:${TAG:-dev}
@@ -211,6 +226,26 @@ services:
       browser: { condition: service_healthy }
     healthcheck: *worker-health
     networks: [backend, sandbox, egress]
+
+  worker-extract:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-extract
+      WORKER_QUEUES: extract
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-claimcheck:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-claimcheck
+      WORKER_QUEUES: claimcheck
+    healthcheck: *worker-health
+    networks: [backend, egress]
 
 volumes:
   pgdata:

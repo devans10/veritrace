@@ -97,6 +97,41 @@ class Settings(BaseSettings):
     archive_poll_interval_s: int = 20
     archive_poll_max_attempts: int = 30
 
+    # --- LLM --------------------------------------------------------------------
+    # anthropic: native Messages API (default); openai_compat: any OpenAI-compatible endpoint.
+    llm_provider: Literal["anthropic", "openai_compat", "fake"] = "anthropic"
+    anthropic_api_key: SecretStr = SecretStr("")
+    anthropic_model: str = "claude-sonnet-4-6"
+    anthropic_base_url: str | None = None  # optional override
+    llm_prompt_cache: bool = True
+    # openai_compat only:
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_api_key: SecretStr = SecretStr("")
+    llm_timeout_s: float = 120.0
+    llm_max_tokens: int = 4096
+
+    # --- Embeddings -------------------------------------------------------------
+    # The pgvector column size is fixed in migration 2 to `embed_dim`. Switching
+    # providers with a different native dim either requires `embed_dim` to match
+    # or a schema change.
+    embed_provider: Literal["voyage", "local", "openai_compat", "fake"] = "voyage"
+    embed_model: str = "voyage-3"
+    embed_dim: int = 1024
+    voyage_api_key: SecretStr = SecretStr("")
+    # openai_compat embeddings use `embed_base_url` + `embed_api_key`; falls back to LLM creds.
+    embed_base_url: str = ""
+    embed_api_key: SecretStr = SecretStr("")
+
+    # --- Search -----------------------------------------------------------------
+    search_provider: Literal["searxng", "none"] = "searxng"
+    searxng_url: str = "http://searxng:8080"
+
+    # --- Fact check -------------------------------------------------------------
+    factcheck_provider: Literal["google", "none"] = "none"
+    google_api_key: SecretStr = SecretStr("")
+    factcheck_base_url: str = "https://factchecktools.googleapis.com"
+
     # --- API ------------------------------------------------------------------
     max_url_length: int = 2048
     result_cache_ttl_s: int = 6 * 3600

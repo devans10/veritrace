@@ -5,11 +5,26 @@ from __future__ import annotations
 from functools import lru_cache
 
 from provcheck.config import Settings, get_settings
-from provcheck.core.interfaces import ArchiveProvider, BrowserCapture, ObjectStore, Queue
+from provcheck.core.interfaces import (
+    ArchiveProvider,
+    BrowserCapture,
+    EmbeddingProvider,
+    FactCheckProvider,
+    LLMClient,
+    ObjectStore,
+    Queue,
+    SearchProvider,
+)
+from provcheck.core.providers.anthropic_llm import AnthropicLLM
 from provcheck.core.providers.archive import NullArchive, WaybackArchive
 from provcheck.core.providers.browser import HTTPBrowserCapture
+from provcheck.core.providers.fake import FakeEmbed, FakeLLM
+from provcheck.core.providers.google_factcheck import GoogleFactCheck, NullFactCheck
 from provcheck.core.providers.objectstore import MemoryObjectStore, S3ObjectStore
+from provcheck.core.providers.openai_compat_llm import OpenAICompatLLM
 from provcheck.core.providers.queue import InlineQueue, RQJobQueue
+from provcheck.core.providers.searxng import NullSearch, SearXNGSearch
+from provcheck.core.providers.voyage_embed import VoyageEmbed
 from provcheck.core.security.ssrf import SafeFetcher, URLPolicy
 
 
@@ -45,6 +60,59 @@ def build_archive(s: Settings) -> ArchiveProvider:
         base_url=s.wayback_base_url,
         access_key=s.ia_s3_access_key.get_secret_value(),
         secret_key=s.ia_s3_secret_key.get_secret_value(),
+    )
+
+
+def build_llm(s: Settings) -> LLMClient:
+    if s.llm_provider == "fake":
+        return FakeLLM()
+    if s.llm_provider == "openai_compat":
+        return OpenAICompatLLM(
+            base_url=s.llm_base_url,
+            model=s.llm_model,
+            api_key=s.llm_api_key.get_secret_value(),
+            default_max_tokens=s.llm_max_tokens,
+        )
+    return AnthropicLLM(
+        api_key=s.anthropic_api_key.get_secret_value(),
+        model=s.anthropic_model,
+        base_url=s.anthropic_base_url,
+        cache_system=s.llm_prompt_cache,
+        default_max_tokens=s.llm_max_tokens,
+    )
+
+
+def build_embedder(s: Settings) -> EmbeddingProvider:
+    if s.embed_provider == "fake":
+        return FakeEmbed(dim=s.embed_dim)
+    if s.embed_provider == "local":
+        from provcheck.core.providers.local_embed import LocalEmbed
+
+        return LocalEmbed(model=s.embed_model, dim=s.embed_dim)
+    if s.embed_provider == "openai_compat":
+        from provcheck.core.providers.openai_compat_embed import OpenAICompatEmbed
+
+        base = s.embed_base_url or s.llm_base_url
+        key = s.embed_api_key.get_secret_value() or s.llm_api_key.get_secret_value()
+        return OpenAICompatEmbed(base_url=base, model=s.embed_model, dim=s.embed_dim, api_key=key)
+    return VoyageEmbed(
+        api_key=s.voyage_api_key.get_secret_value(),
+        model=s.embed_model,
+        dim=s.embed_dim,
+    )
+
+
+def build_search(s: Settings) -> SearchProvider:
+    if s.search_provider == "none":
+        return NullSearch()
+    return SearXNGSearch(base_url=s.searxng_url)
+
+
+def build_factcheck(s: Settings) -> FactCheckProvider:
+    if s.factcheck_provider == "none":
+        return NullFactCheck()
+    return GoogleFactCheck(
+        api_key=s.google_api_key.get_secret_value(), base_url=s.factcheck_base_url
     )
 
 
@@ -85,6 +153,22 @@ class Providers:
     @property
     def archive(self) -> ArchiveProvider:
         return self._get("archive", build_archive)  # type: ignore[return-value]
+
+    @property
+    def llm(self) -> LLMClient:
+        return self._get("llm", build_llm)  # type: ignore[return-value]
+
+    @property
+    def embedder(self) -> EmbeddingProvider:
+        return self._get("embedder", build_embedder)  # type: ignore[return-value]
+
+    @property
+    def search(self) -> SearchProvider:
+        return self._get("search", build_search)  # type: ignore[return-value]
+
+    @property
+    def factcheck(self) -> FactCheckProvider:
+        return self._get("factcheck", build_factcheck)  # type: ignore[return-value]
 
     @property
     def fetcher(self) -> SafeFetcher:

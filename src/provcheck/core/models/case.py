@@ -6,18 +6,30 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CaseCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    url: str = Field(min_length=1, max_length=2048)
+    url: str | None = Field(default=None, min_length=1, max_length=2048)
+    text: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50_000,
+        description="Submit raw text instead of a URL. Skips capture; goes straight to extraction.",
+    )
     archive: bool = Field(
         default=True,
         description="Submit the URL to the Internet Archive. Saving makes the URL public.",
     )
     refresh: bool = Field(default=False, description="Ignore a cached recent result.")
+
+    @model_validator(mode="after")
+    def _one_input(self) -> CaseCreate:
+        if (self.url is None) == (self.text is None):
+            raise ValueError("exactly one of `url` or `text` must be supplied")
+        return self
 
 
 class ArtifactOut(BaseModel):

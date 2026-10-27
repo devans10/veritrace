@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, ClassVar
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -21,6 +22,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from provcheck.config import get_settings
+
 CASE_STATUSES = (
     "queued",
     "capturing",
@@ -35,6 +38,18 @@ DEPTHS = ("quick", "full")
 ARTIFACT_KINDS = ("html", "screenshot", "text", "media", "ela", "report_json")
 ARCHIVE_STATUSES = ("saved", "pending", "failed", "disabled", "not_configured", "opted_out")
 RUN_STATUSES = ("queued", "running", "done", "failed", "skipped")
+CLAIM_TYPES = ("event", "statistic", "quote", "attribution", "other")
+DIRECTIONS = ("supports", "undermines", "neutral")
+CATEGORIES = ("fabricated", "misleading_context", "satire", "corroborated")
+UNVERIFIED_REASONS = (
+    "not_configured",
+    "provider_unavailable",
+    "no_results",
+    "blocked_by_policy",
+    "timeout",
+    "unsupported_platform",
+    "error",
+)
 
 
 def _in(col: str, values: tuple[str, ...]) -> str:
@@ -157,6 +172,85 @@ class InvestigatorRun(Base):
     providers: Mapped[dict[str, Any]] = mapped_column(default=dict)
 
     case: Mapped[Case] = relationship(back_populates="runs")
+
+
+EMBED_DIM = get_settings().embed_dim
+
+
+class Claim(Base):
+    __tablename__ = "claims"
+    __table_args__ = (
+        CheckConstraint(_in("claim_type", CLAIM_TYPES), name="ck_claims_type"),
+        Index("ix_claims_case_ordinal", "case_id", "ordinal"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    source_span: Mapped[str] = mapped_column(Text)
+    span_start: Mapped[int | None] = mapped_column(Integer)
+    span_end: Mapped[int | None] = mapped_column(Integer)
+    claim_type: Mapped[str] = mapped_column(String(16), default="other")
+    checkworthiness: Mapped[float | None] = mapped_column()
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM))
+    extractor_model: Mapped[str | None] = mapped_column(String(128))
+    prompt_version: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = _now()
+
+
+class EvidenceItem(Base):
+    __tablename__ = "evidence_items"
+    __table_args__ = (
+        CheckConstraint(_in("direction", DIRECTIONS), name="ck_evidence_direction"),
+        Index("ix_evidence_case", "case_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("investigator_runs.id", ondelete="CASCADE")
+    )
+    claim_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("claims.id", ondelete="SET NULL"))
+    investigator: Mapped[str] = mapped_column(String(32))
+    signal: Mapped[str] = mapped_column(String(64))
+    finding: Mapped[str] = mapped_column(Text)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    source_title: Mapped[str | None] = mapped_column(Text)
+    source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retrieved_at: Mapped[datetime] = _now()
+    direction: Mapped[str] = mapped_column(String(16))
+    strength: Mapped[float] = mapped_column()
+    confidence: Mapped[float] = mapped_column()
+    category_hint: Mapped[str | None] = mapped_column(String(32))
+    details: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    artifact_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("artifacts.id"))
+    source_content_sha256: Mapped[str | None] = mapped_column(String(64))
+
+
+class UnverifiedItem(Base):
+    __tablename__ = "unverified_items"
+    __table_args__ = (
+        CheckConstraint(_in("reason", UNVERIFIED_REASONS), name="ck_unverified_reason"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("investigator_runs.id", ondelete="CASCADE")
+    )
+    claim_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("claims.id", ondelete="SET NULL"))
+    investigator: Mapped[str] = mapped_column(String(32))
+    subject: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(String(32))
+    detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
 
 
 class AuditLog(Base):

@@ -6,6 +6,15 @@
 x-fixture-allow: &fixture-allow
   SSRF_ALLOW_CIDRS: 172.31.250.0/24
 
+# In the dev/test stack we substitute in-process fakes for the LLM, embeddings,
+# and fact-check so integration tests don't need keys and don't hit the network.
+x-fakes-env: &fakes-env
+  LLM_PROVIDER: fake
+  EMBED_PROVIDER: fake
+  EMBED_DIM: 32
+  SEARCH_PROVIDER: none
+  FACTCHECK_PROVIDER: none
+
 services:
   fixture-site:
     image: nginx:1.28-alpine
@@ -30,12 +39,22 @@ services:
     networks: [sandbox, backend, egress, fixtures]
 
   api:
-    environment: *fixture-allow
+    environment:
+      <<: [*fixture-allow, *fakes-env]
     networks: [backend, frontend, fixtures]
 
   worker-capture:
-    environment: *fixture-allow
+    environment:
+      <<: [*fixture-allow, *fakes-env]
     networks: [backend, sandbox, egress, fixtures]
+
+  worker-extract:
+    environment:
+      <<: *fakes-env
+
+  worker-claimcheck:
+    environment:
+      <<: *fakes-env
 
   postgres:
     ports: ["127.0.0.1:55432:5432"]

@@ -7,9 +7,11 @@ requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
 dependencies = [
     "alembic>=1.14",
+    "anthropic>=0.69",
     "fastapi>=0.115",
     "httpx>=0.28",
     "minio>=7.2",
+    "pgvector>=0.3",
     "psycopg[binary]>=3.2",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
@@ -18,7 +20,11 @@ dependencies = [
     "rq>=2.0",
     "sqlalchemy>=2.0.36",
     "uvicorn[standard]>=0.32",
+    "voyageai>=0.3",
 ]
+
+[project.optional-dependencies]
+local-embed = ["sentence-transformers>=3.3"]
 
 [project.scripts]
 provcheck-admin = "provcheck.admin:main"
@@ -54,7 +60,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["rq.*", "minio.*"]
+module = ["rq.*", "minio.*", "voyageai.*", "sentence_transformers.*", "pgvector.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

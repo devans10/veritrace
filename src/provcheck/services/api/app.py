@@ -114,6 +114,30 @@ def create_app() -> FastAPI:
         session: Session = Depends(get_session),
         providers: Providers = Depends(providers_dep),
     ) -> CaseOut:
+        if body.text is not None:
+            case = Case(
+                id=uuid.uuid4(),
+                input_type="text",
+                input_text=body.text,
+                # Cache key over the text so pasted-text submissions dedupe too.
+                cache_key=hashlib.sha256(body.text.encode()).hexdigest(),
+                status="extracting",  # skip capture; go straight to extraction
+                archive_opt_out=True,
+            )
+            session.add(case)
+            session.flush()
+            audit.append(
+                session,
+                "case.created",
+                {"input_type": "text", "chars": len(body.text)},
+                case_id=case.id,
+            )
+            session.commit()
+            state.enqueue_stage(providers.queue, case.id, "extracting")
+            session.refresh(case)
+            return _case_out(session, case)
+
+        assert body.url is not None  # model_validator guarantees exactly one input
         policy = URLPolicy.from_settings(settings)
         try:
             target = asyncio.run(validate_url(body.url, policy))
