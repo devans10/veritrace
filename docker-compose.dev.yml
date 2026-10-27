@@ -68,6 +68,11 @@ services:
     environment:
       <<: *fakes-env
 
+  worker-media:
+    environment:
+      <<: [*fixture-allow, *fakes-env]
+    networks: [backend, egress, fixtures]
+
   postgres:
     ports: ["127.0.0.1:55432:5432"]
     networks: [backend, devports]

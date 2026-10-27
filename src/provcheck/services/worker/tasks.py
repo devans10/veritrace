@@ -8,6 +8,7 @@ from typing import Any
 
 from provcheck.core.investigators.claimcheck import run_claimcheck
 from provcheck.core.investigators.corroboration import run_corroboration
+from provcheck.core.investigators.media import run_media
 from provcheck.core.investigators.provenance import run_provenance
 from provcheck.core.investigators.source import run_source
 from provcheck.core.pipeline.capture import run_archive_poll, run_capture
@@ -48,6 +49,10 @@ def _corroboration(p: dict[str, Any]) -> None:
     run_corroboration(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
 
 
+def _media(p: dict[str, Any]) -> None:
+    run_media(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
 TASKS: dict[str, Callable[[dict[str, Any]], None]] = {
     "pipeline.capture": _capture,
     "pipeline.archive_poll": _archive_poll,
@@ -57,6 +62,7 @@ TASKS: dict[str, Callable[[dict[str, Any]], None]] = {
     "investigator.provenance": _provenance,
     "investigator.source": _source,
     "investigator.corroboration": _corroboration,
+    "investigator.media": _media,
 }
 
 

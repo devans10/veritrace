@@ -36,13 +36,20 @@ STAGE_TASKS: dict[str, tuple[str, str, int]] = {
 TERMINAL = frozenset({"complete", "failed"})
 TERMINAL_RUN = frozenset({"done", "failed", "skipped"})
 
-# Investigators active in step 3.
-INVESTIGATORS: tuple[str, ...] = ("claimcheck", "provenance", "source", "corroboration")
+# Investigators active in step 4.
+INVESTIGATORS: tuple[str, ...] = (
+    "claimcheck",
+    "provenance",
+    "source",
+    "corroboration",
+    "media",
+)
 INVESTIGATOR_QUEUES: dict[str, str] = {
     "claimcheck": "claimcheck",
     "provenance": "provenance",
     "source": "source",
     "corroboration": "corroboration",
+    "media": "media",
 }
 
 

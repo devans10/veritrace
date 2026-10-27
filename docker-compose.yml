@@ -277,6 +277,19 @@ services:
     healthcheck: *worker-health
     networks: [backend, egress]
 
+  worker-media:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-media
+      WORKER_QUEUES: media
+    depends_on:
+      <<: *app-deps
+      egress-proxy: { condition: service_healthy }
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
 volumes:
   pgdata:
   redisdata:

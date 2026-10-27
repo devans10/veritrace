@@ -147,6 +147,23 @@ class Settings(BaseSettings):
     phash_similarity_threshold: int = 8  # hamming distance; 0 = identical, 64 = maximum
     phash_max_images_per_case: int = 20
 
+    # --- Uploads ----------------------------------------------------------------
+    upload_max_bytes: int = 25 * 1024 * 1024  # 25 MB
+    upload_allowed_mimes: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+            "video/mp4",
+        ]
+    )
+
+    # --- Media forensics --------------------------------------------------------
+    media_max_images_per_case: int = 5
+    ela_jpeg_quality: int = 90  # Re-save quality for Error Level Analysis
+    detector_provider: Literal["none"] = "none"  # No AI-image detector enabled in v0.1
+
     # --- API ------------------------------------------------------------------
     max_url_length: int = 2048
     result_cache_ttl_s: int = 6 * 3600
@@ -163,6 +180,13 @@ class Settings(BaseSettings):
     def _split_ports(cls, v: Any) -> Any:
         if isinstance(v, str):
             return [int(p) for p in v.split(",") if p.strip()]
+        return v
+
+    @field_validator("upload_allowed_mimes", mode="before")
+    @classmethod
+    def _split_mimes(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return [m.strip() for m in v.split(",") if m.strip()]
         return v
 
     @model_validator(mode="after")

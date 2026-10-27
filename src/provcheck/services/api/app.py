@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -30,6 +30,7 @@ from provcheck.core.models.case import (
 from provcheck.core.pipeline import state
 from provcheck.core.providers.registry import Providers, get_providers
 from provcheck.core.security.ssrf import BlockedURL, URLPolicy, validate_url
+from provcheck.core.security.uploads import UploadRejected, validate_upload
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +50,8 @@ SAFE_MIME = {
     "screenshot": "image/png",
     "text": "text/plain; charset=utf-8",
     "html": "text/plain; charset=utf-8",
+    "media": "application/octet-stream",  # never serve uploads with their claimed type
+    "ela": "image/png",
 }
 
 
@@ -188,6 +191,71 @@ def create_app() -> FastAPI:
         session.commit()  # commit before enqueue so the worker sees the row
         # queued -> capturing happens inside the capture task under a row lock.
         state.enqueue_stage(providers.queue, case.id, "capturing")
+        session.refresh(case)
+        return _case_out(session, case)
+
+    @app.post("/v1/cases/upload", status_code=202, response_model=CaseOut)
+    async def create_case_upload(
+        file: UploadFile = File(...),
+        session: Session = Depends(get_session),
+        providers: Providers = Depends(providers_dep),
+    ) -> CaseOut:
+        raw = await file.read(settings.upload_max_bytes + 1)
+        try:
+            v = validate_upload(
+                raw,
+                max_bytes=settings.upload_max_bytes,
+                allowed_mimes=settings.upload_allowed_mimes,
+            )
+        except UploadRejected as e:
+            raise HTTPException(422, detail=f"upload rejected: {e}") from e
+
+        store = providers.object_store
+        obj = await store.put(v.data, content_type=v.detected_mime, prefix="uploads")
+        from provcheck.core.providers.local_phash import compute_phash
+
+        try:
+            phash = compute_phash(v.data) if v.detected_mime.startswith("image/") else None
+        except Exception:
+            phash = None
+
+        artifact = Artifact(
+            id=uuid.uuid4(),
+            case_id=uuid.UUID(int=0),  # overwritten below after case exists
+            kind="media",
+            object_key=obj.key,
+            sha256=obj.sha256,
+            size=obj.size,
+            mime=v.detected_mime,
+            phash=phash,
+        )
+        cache_key = hashlib.sha256(obj.sha256.encode()).hexdigest()
+        case = Case(
+            id=uuid.uuid4(),
+            input_type="upload",
+            cache_key=cache_key,
+            status="investigating",  # skip capture + extract; media investigator does the work
+            archive_opt_out=True,
+        )
+        session.add(case)
+        session.flush()
+        artifact.case_id = case.id
+        session.add(artifact)
+        session.flush()
+        case.upload_artifact_id = artifact.id
+        audit.append(
+            session,
+            "case.created",
+            {
+                "input_type": "upload",
+                "detected_mime": v.detected_mime,
+                "size": v.size,
+                "sha256": obj.sha256,
+            },
+            case_id=case.id,
+        )
+        session.commit()
+        state.enqueue_stage(providers.queue, case.id, "investigating")
         session.refresh(case)
         return _case_out(session, case)
 

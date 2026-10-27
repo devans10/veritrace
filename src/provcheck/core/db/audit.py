@@ -64,10 +64,15 @@ def append(
     """Append an audit entry inside the caller's transaction."""
     payload = json.loads(canonical(payload or {}))  # normalise to JSON types up front
     actor = actor or default_actor()
-    session.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _LOCK_KEY})
-    prev = session.execute(
-        select(AuditLog.hash).order_by(AuditLog.id.desc()).limit(1)
-    ).scalar_one_or_none()
+    # Acquire the advisory lock BEFORE any pending inserts flush — otherwise
+    # auto-flush would push INSERTs with FK references first, which take SHARE
+    # locks on the referenced case row before the advisory lock, inverting the
+    # order used by advance_investigation and causing deadlocks under contention.
+    with session.no_autoflush:
+        session.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _LOCK_KEY})
+        prev = session.execute(
+            select(AuditLog.hash).order_by(AuditLog.id.desc()).limit(1)
+        ).scalar_one_or_none()
     prev_hash = prev or GENESIS
     # Microsecond precision is what Postgres stores, so the hash survives a round trip.
     ts = datetime.now(UTC)

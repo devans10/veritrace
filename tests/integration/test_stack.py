@@ -99,9 +99,9 @@ def test_audit_chain_for_case():
     ]
     assert "extract.completed" in events
     assert events.count("investigators.fan_out") == 1
-    # Four investigators each produce start/finish, so we see 4 of each.
-    assert events.count("investigator.started") == 4
-    assert events.count("investigator.finished") == 4
+    # Five investigators each produce start/finish, so we see 5 of each.
+    assert events.count("investigator.started") == 5
+    assert events.count("investigator.finished") == 5
     assert events[-1] == "stage.transition"
 
 
@@ -122,6 +122,44 @@ def test_text_submission_skips_capture_and_completes():
     assert events[0] == "case.created"
     assert "extract.completed" in events
     assert events[-1] == "stage.transition"
+
+
+def test_upload_submission_runs_media_forensics():
+    import io
+
+    from PIL import Image
+
+    img = Image.new("RGB", (128, 128), color=(255, 100, 50))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    files = {"file": ("sample.jpg", buf.getvalue(), "image/jpeg")}
+    r = httpx.post(f"{API}/v1/cases/upload", files=files, timeout=30)
+    assert r.status_code in (200, 202), r.text
+    case = wait(r.json()["id"])
+    assert case["status"] == "complete", case["error"]
+    assert case["input_type"] == "upload"
+    d = httpx.get(f"{API}/v1/cases/{case['id']}/audit").json()
+    assert d["entries_valid"] and d["chain_valid"]
+    events = [e["event_type"] for e in d["entries"]]
+    # Upload cases skip capture + extract; fan-out happens then 5 investigators run.
+    assert "capture.stored" not in events
+    assert "extract.completed" not in events
+    assert events.count("investigators.fan_out") == 1
+    assert events.count("investigator.finished") == 5
+    assert "media.wrote" in events
+
+
+def test_upload_rejects_non_image_payload():
+    files = {"file": ("x.txt", b"<html>not an image</html>" * 20, "text/plain")}
+    r = httpx.post(f"{API}/v1/cases/upload", files=files, timeout=10)
+    assert r.status_code == 422, r.text
+
+
+def test_upload_rejects_oversize():
+    big = b"\xff" * (26 * 1024 * 1024)  # 26 MB
+    files = {"file": ("big.jpg", big, "image/jpeg")}
+    r = httpx.post(f"{API}/v1/cases/upload", files=files, timeout=20)
+    assert r.status_code == 422, r.text
 
 
 @pytest.mark.parametrize(

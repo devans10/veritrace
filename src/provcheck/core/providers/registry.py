@@ -8,8 +8,12 @@ from provcheck.config import Settings, get_settings
 from provcheck.core.interfaces import (
     ArchiveProvider,
     BrowserCapture,
+    C2PAVerifier,
+    Detector,
     DomainInfoProvider,
+    ELAProvider,
     EmbeddingProvider,
+    ExifReader,
     FactCheckProvider,
     LLMClient,
     ObjectStore,
@@ -20,6 +24,10 @@ from provcheck.core.interfaces import (
 from provcheck.core.providers.anthropic_llm import AnthropicLLM
 from provcheck.core.providers.archive import NullArchive, WaybackArchive
 from provcheck.core.providers.browser import HTTPBrowserCapture
+from provcheck.core.providers.c2pa import C2PAPythonVerifier, NullC2PAVerifier
+from provcheck.core.providers.detector import NullDetector
+from provcheck.core.providers.ela import PillowELA
+from provcheck.core.providers.exif import PillowExifReader
 from provcheck.core.providers.fake import FakeEmbed, FakeLLM
 from provcheck.core.providers.google_factcheck import GoogleFactCheck, NullFactCheck
 from provcheck.core.providers.local_phash import LocalPHashReverseImage, NullReverseImage
@@ -137,6 +145,25 @@ def build_sources(s: Settings) -> SourceLists:
     return load_source_lists(s.sources_dir)
 
 
+def build_exif(_s: Settings) -> ExifReader:
+    return PillowExifReader()
+
+
+def build_c2pa(_s: Settings) -> C2PAVerifier:
+    try:
+        return C2PAPythonVerifier()
+    except Exception:
+        return NullC2PAVerifier()
+
+
+def build_ela(s: Settings) -> ELAProvider:
+    return PillowELA(jpeg_quality=s.ela_jpeg_quality)
+
+
+def build_detector(_s: Settings) -> Detector:
+    return NullDetector()
+
+
 def build_fetcher(s: Settings) -> SafeFetcher:
     return SafeFetcher(
         URLPolicy.from_settings(s),
@@ -202,6 +229,22 @@ class Providers:
     @property
     def sources(self) -> SourceLists:
         return self._get("sources", build_sources)  # type: ignore[return-value]
+
+    @property
+    def exif(self) -> ExifReader:
+        return self._get("exif", build_exif)  # type: ignore[return-value]
+
+    @property
+    def c2pa(self) -> C2PAVerifier:
+        return self._get("c2pa", build_c2pa)  # type: ignore[return-value]
+
+    @property
+    def ela(self) -> ELAProvider:
+        return self._get("ela", build_ela)  # type: ignore[return-value]
+
+    @property
+    def detector(self) -> Detector:
+        return self._get("detector", build_detector)  # type: ignore[return-value]
 
     @property
     def fetcher(self) -> SafeFetcher:
