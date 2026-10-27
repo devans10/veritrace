@@ -56,7 +56,9 @@ async def _capture(url: str, providers: Providers, policy: URLPolicy) -> _Stored
     return _Stored(result, html, shot, text)
 
 
-def _artifact(case_id: uuid.UUID, kind: str, obj: StoredObject) -> Artifact:
+def _artifact(
+    case_id: uuid.UUID, kind: str, obj: StoredObject, *, phash: str | None = None
+) -> Artifact:
     return Artifact(
         id=uuid.uuid4(),
         case_id=case_id,
@@ -65,6 +67,7 @@ def _artifact(case_id: uuid.UUID, kind: str, obj: StoredObject) -> Artifact:
         sha256=obj.sha256,
         size=obj.size,
         mime=obj.content_type,
+        phash=phash,
     )
 
 
@@ -99,10 +102,23 @@ def run_capture(case_id: uuid.UUID, providers: Providers) -> None:
         return
 
     r = stored.result
+    # Compute pHash of the screenshot so the local reverse-image provider can
+    # find it in future cases. Failure is non-fatal — pHash is a signal, not a
+    # correctness requirement.
+    screenshot_phash: str | None = None
+    try:
+        from provcheck.core.providers.local_phash import compute_phash
+
+        screenshot_phash = compute_phash(r.screenshot_png)
+    except Exception as e:
+        log.info("skipping screenshot pHash: %s", e)
+
     with session_scope() as s:
         arts = {
             "html": _artifact(case_id, "html", stored.html),
-            "screenshot": _artifact(case_id, "screenshot", stored.screenshot),
+            "screenshot": _artifact(
+                case_id, "screenshot", stored.screenshot, phash=screenshot_phash
+            ),
             "text": _artifact(case_id, "text", stored.text),
         }
         s.add_all(arts.values())

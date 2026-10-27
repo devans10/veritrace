@@ -56,6 +56,18 @@ services:
     environment:
       <<: *fakes-env
 
+  worker-provenance:
+    environment:
+      <<: *fakes-env
+
+  worker-source:
+    environment:
+      <<: *fakes-env
+
+  worker-corroboration:
+    environment:
+      <<: *fakes-env
+
   postgres:
     ports: ["127.0.0.1:55432:5432"]
     networks: [backend, devports]

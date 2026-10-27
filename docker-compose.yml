@@ -247,6 +247,36 @@ services:
     healthcheck: *worker-health
     networks: [backend, egress]
 
+  worker-provenance:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-provenance
+      WORKER_QUEUES: provenance
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-source:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-source
+      WORKER_QUEUES: source
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-corroboration:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-corroboration
+      WORKER_QUEUES: corroboration
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
 volumes:
   pgdata:
   redisdata:

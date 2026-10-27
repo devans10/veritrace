@@ -13,11 +13,13 @@ from provcheck.core.interfaces.base import (
     ProviderUnavailable,
 )
 from provcheck.core.interfaces.browser import BrowserCapture, CaptureOptions, CaptureResult
+from provcheck.core.interfaces.domaininfo import DomainInfo, DomainInfoProvider
 from provcheck.core.interfaces.embedding import EmbeddingProvider, EmbedInputType
 from provcheck.core.interfaces.factcheck import ClaimReviewHit, FactCheckProvider
 from provcheck.core.interfaces.llm import LLMClient, LLMResult, LLMUsage
 from provcheck.core.interfaces.objectstore import ObjectStore, StoredObject
 from provcheck.core.interfaces.queue import JobRef, JobStatus, Queue
+from provcheck.core.interfaces.reverse_image import ImageMatch, ReverseImageProvider
 from provcheck.core.interfaces.search import SearchProvider, SearchResult, TimeRange
 
 __all__ = [
@@ -29,9 +31,12 @@ __all__ = [
     "CaptureOptions",
     "CaptureResult",
     "ClaimReviewHit",
+    "DomainInfo",
+    "DomainInfoProvider",
     "EmbedInputType",
     "EmbeddingProvider",
     "FactCheckProvider",
+    "ImageMatch",
     "JobRef",
     "JobStatus",
     "LLMClient",
@@ -43,6 +48,7 @@ __all__ = [
     "ProviderHealth",
     "ProviderUnavailable",
     "Queue",
+    "ReverseImageProvider",
     "SearchProvider",
     "SearchResult",
     "StoredObject",

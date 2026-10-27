@@ -91,7 +91,67 @@ class WaybackArchive:
         return ArchiveJobStatus(job_id=job.job_id, state="pending")
 
     async def history(self, url: str, *, limit: int = 50) -> list[ArchiveCapture]:
-        raise NotConfigured("archive history (CDX) lookup arrives in build step 3")
+        """Wayback CDX history. The CDX server is unauthenticated.
+
+        ``GET /cdx/search/cdx?url=<url>&output=json&limit=<limit>&fl=...``
+        returns a JSON array where the first row is a header. Timestamps are
+        ``yyyyMMddHHmmss`` in UTC. Fields selected via `fl`:
+        ``timestamp,original,statuscode,digest``.
+        """
+        import json
+        from datetime import UTC
+        from datetime import datetime as dt
+
+        params = {
+            "url": url,
+            "output": "json",
+            "limit": str(limit),
+            "fl": "timestamp,original,statuscode,digest",
+        }
+        async with trusted_client(self.base_url, timeout=30) as client:
+            try:
+                resp = await client.get("/cdx/search/cdx", params=params)
+            except httpx.TimeoutException as e:
+                raise ProviderUnavailable("wayback cdx timeout") from e
+            except httpx.HTTPError as e:
+                raise ProviderUnavailable(f"wayback cdx unreachable: {type(e).__name__}") from e
+        if resp.status_code == 429 or resp.status_code >= 500:
+            raise ProviderUnavailable(f"wayback cdx HTTP {resp.status_code}")
+        if resp.status_code >= 400:
+            raise ProviderError(f"wayback cdx HTTP {resp.status_code}")
+        try:
+            rows = json.loads(resp.text) if resp.text else []
+        except ValueError as e:
+            raise ProviderError("wayback cdx returned non-JSON") from e
+        if not isinstance(rows, list) or len(rows) < 2:
+            return []
+        header = rows[0]
+        idx = {name: i for i, name in enumerate(header)}
+        out: list[ArchiveCapture] = []
+        for row in rows[1:]:
+            if not isinstance(row, list):
+                continue
+            ts = str(row[idx["timestamp"]])
+            try:
+                captured_at = dt.strptime(ts, "%Y%m%d%H%M%S").replace(tzinfo=UTC)
+            except ValueError:
+                continue
+            orig = str(row[idx["original"]])
+            status = row[idx.get("statuscode", -1)] if "statuscode" in idx else None
+            try:
+                status_int = int(status) if status not in (None, "-", "") else None
+            except (TypeError, ValueError):
+                status_int = None
+            out.append(
+                ArchiveCapture(
+                    url=orig,
+                    archive_url=f"{self.base_url}/web/{ts}/{orig}",
+                    captured_at=captured_at,
+                    status_code=status_int,
+                    digest=str(row[idx["digest"]]) if "digest" in idx else None,
+                )
+            )
+        return out
 
     async def health(self) -> ProviderHealth:
         return ProviderHealth(self.name, self._auth is not None, "" if self._auth else "no keys")

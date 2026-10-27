@@ -1,0 +1,50 @@
+# Known satirical / parody publications. Match on registrable domain.
+# A hit sets the "Satire / parody" category and adds a report note; it DOES
+# NOT in itself produce a fabricated-style high-risk band — satire is not
+# fabrication, and the scorer caps per-signal contribution.
+#
+# Each entry cites its basis so adds/removals are reviewable. Entries are the
+# publication's own self-identification wherever possible, else a reputable
+# third-party description. Keep this list conservative — adding a borderline
+# site here mislabels real reporting.
+#
+# Format: {domain, source, note}
+
+- domain: theonion.com
+  source: "The Onion's About page explicitly describes itself as satire."
+- domain: babylonbee.com
+  source: "The Babylon Bee's About page describes itself as 'the world's best satire site'."
+- domain: clickhole.com
+  source: "ClickHole About page: 'Everything on this website is a joke.'"
+- domain: reductress.com
+  source: "Reductress About page describes itself as a satirical women's magazine."
+- domain: thehardtimes.net
+  source: "The Hard Times About page describes itself as a satirical punk/metal magazine."
+- domain: duffelblog.com
+  source: "The Duffel Blog About page describes itself as 'military satire'."
+- domain: thedailymash.co.uk
+  source: "The Daily Mash About page: 'the UK's leading satirical news source'."
+- domain: thebeaverton.com
+  source: "The Beaverton About page: 'Canadian satire'."
+- domain: thepoke.com
+  source: "The Poke About page describes itself as a satirical news site (UK)."
+- domain: newsthump.com
+  source: "NewsThump About page: 'news with a satirical twist'."
+- domain: thespoof.com
+  source: "The Spoof self-describes as a satire site."
+- domain: waterfordwhispersnews.com
+  source: "Waterford Whispers News About page: 'Ireland's best known satire news website'."
+- domain: thetoque.com
+  source: "The Toque self-describes as 'Canadian satire'."
+- domain: elmundotoday.com
+  source: "El Mundo Today self-describes as satire (Spanish-language)."
+- domain: lagazetadelgolf.com
+  source: "La Gazeta del Golf self-describes as satirical (Spanish-language)."
+- domain: lequipedusoir.com
+  source: "L'Équipe du Soir — French-language satire site self-identifies as parody."
+- domain: thebetootaadvocate.com
+  source: "The Betoota Advocate About page: 'Australia's oldest satirical newspaper'."
+- domain: thenewsbiscuit.com
+  source: "The News Biscuit About page describes itself as a satirical news site."
+- domain: theshovel.com.au
+  source: "The Shovel About page: 'satirical news from Australia'."

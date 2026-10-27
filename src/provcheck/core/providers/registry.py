@@ -8,11 +8,13 @@ from provcheck.config import Settings, get_settings
 from provcheck.core.interfaces import (
     ArchiveProvider,
     BrowserCapture,
+    DomainInfoProvider,
     EmbeddingProvider,
     FactCheckProvider,
     LLMClient,
     ObjectStore,
     Queue,
+    ReverseImageProvider,
     SearchProvider,
 )
 from provcheck.core.providers.anthropic_llm import AnthropicLLM
@@ -20,10 +22,13 @@ from provcheck.core.providers.archive import NullArchive, WaybackArchive
 from provcheck.core.providers.browser import HTTPBrowserCapture
 from provcheck.core.providers.fake import FakeEmbed, FakeLLM
 from provcheck.core.providers.google_factcheck import GoogleFactCheck, NullFactCheck
+from provcheck.core.providers.local_phash import LocalPHashReverseImage, NullReverseImage
 from provcheck.core.providers.objectstore import MemoryObjectStore, S3ObjectStore
 from provcheck.core.providers.openai_compat_llm import OpenAICompatLLM
 from provcheck.core.providers.queue import InlineQueue, RQJobQueue
+from provcheck.core.providers.rdap import NullDomainInfo, RDAPDomainInfo
 from provcheck.core.providers.searxng import NullSearch, SearXNGSearch
+from provcheck.core.providers.sources import SourceLists, load_source_lists
 from provcheck.core.providers.voyage_embed import VoyageEmbed
 from provcheck.core.security.ssrf import SafeFetcher, URLPolicy
 
@@ -116,6 +121,22 @@ def build_factcheck(s: Settings) -> FactCheckProvider:
     )
 
 
+def build_domaininfo(s: Settings) -> DomainInfoProvider:
+    if s.domaininfo_provider == "none":
+        return NullDomainInfo()
+    return RDAPDomainInfo(bootstrap_url=s.rdap_bootstrap_url)
+
+
+def build_reverse_image(s: Settings) -> ReverseImageProvider:
+    if s.reverse_image_provider == "none":
+        return NullReverseImage()
+    return LocalPHashReverseImage(similarity_threshold=s.phash_similarity_threshold)
+
+
+def build_sources(s: Settings) -> SourceLists:
+    return load_source_lists(s.sources_dir)
+
+
 def build_fetcher(s: Settings) -> SafeFetcher:
     return SafeFetcher(
         URLPolicy.from_settings(s),
@@ -169,6 +190,18 @@ class Providers:
     @property
     def factcheck(self) -> FactCheckProvider:
         return self._get("factcheck", build_factcheck)  # type: ignore[return-value]
+
+    @property
+    def domaininfo(self) -> DomainInfoProvider:
+        return self._get("domaininfo", build_domaininfo)  # type: ignore[return-value]
+
+    @property
+    def reverse_image(self) -> ReverseImageProvider:
+        return self._get("reverse_image", build_reverse_image)  # type: ignore[return-value]
+
+    @property
+    def sources(self) -> SourceLists:
+        return self._get("sources", build_sources)  # type: ignore[return-value]
 
     @property
     def fetcher(self) -> SafeFetcher:

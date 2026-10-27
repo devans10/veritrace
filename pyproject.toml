@@ -10,15 +10,20 @@ dependencies = [
     "anthropic>=0.69",
     "fastapi>=0.115",
     "httpx>=0.28",
+    "imagehash>=4.3",
     "minio>=7.2",
     "pgvector>=0.3",
+    "pillow>=11.0",
     "psycopg[binary]>=3.2",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "python-multipart>=0.0.12",
+    "pyyaml>=6.0",
     "redis>=5.2",
     "rq>=2.0",
+    "selectolax>=0.3",
     "sqlalchemy>=2.0.36",
+    "tldextract>=5.1",
     "uvicorn[standard]>=0.32",
     "voyageai>=0.3",
 ]
@@ -60,7 +65,16 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["rq.*", "minio.*", "voyageai.*", "sentence_transformers.*", "pgvector.*"]
+module = [
+    "rq.*",
+    "minio.*",
+    "voyageai.*",
+    "sentence_transformers.*",
+    "pgvector.*",
+    "imagehash.*",
+    "tldextract.*",
+    "selectolax.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -81,4 +95,5 @@ dev = [
     "pytest-asyncio>=0.24",
     "respx>=0.21",
     "ruff>=0.8",
+    "types-pyyaml>=6.0",
 ]

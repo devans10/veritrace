@@ -1,0 +1,58 @@
+# Fact-checking publications used to restrict SearXNG queries in the
+# claim-check investigator. Membership here says "this outlet publishes
+# ClaimReview-style verdicts" — it does NOT by itself grant corroboration
+# credit.
+#
+# Entries are IFCN signatories (International Fact-Checking Network) wherever
+# possible, plus wire-service fact-check desks.
+
+- domain: snopes.com
+  source: "IFCN verified signatory."
+- domain: politifact.com
+  source: "IFCN verified signatory (Poynter)."
+- domain: factcheck.org
+  source: "IFCN verified signatory (Annenberg Public Policy Center, University of Pennsylvania)."
+- domain: apnews.com
+  source: "AP Fact Check desk (apnews.com/hub/ap-fact-check); AP is an IFCN signatory."
+- domain: reuters.com
+  source: "Reuters Fact Check (reuters.com/fact-check); IFCN signatory."
+- domain: afp.com
+  source: "AFP Fact Check (factcheck.afp.com); IFCN verified signatory."
+- domain: fullfact.org
+  source: "Full Fact (UK); IFCN verified signatory."
+- domain: leadstories.com
+  source: "Lead Stories; IFCN verified signatory."
+- domain: usatoday.com
+  source: "USA Today Fact Check; IFCN signatory."
+- domain: washingtonpost.com
+  source: "Washington Post Fact Checker column."
+- domain: bbc.co.uk
+  source: "BBC Reality Check (bbc.co.uk/news/reality_check)."
+- domain: theconversation.com
+  source: "The Conversation FactCheck (theconversation.com/au/factcheck)."
+- domain: dpa-factchecking.com
+  source: "Deutsche Presse-Agentur fact check desk; IFCN signatory."
+- domain: correctiv.org
+  source: "CORRECTIV Faktencheck (DE); IFCN signatory."
+- domain: maldita.es
+  source: "Maldita.es (Spain); IFCN signatory."
+- domain: newtral.es
+  source: "Newtral (Spain); IFCN signatory."
+- domain: chequeado.com
+  source: "Chequeado (Argentina); IFCN signatory."
+- domain: aosfatos.org
+  source: "Aos Fatos (Brazil); IFCN signatory."
+- domain: lupa.news
+  source: "Agência Lupa (Brazil); IFCN signatory."
+- domain: boomlive.in
+  source: "BOOM (India); IFCN signatory."
+- domain: thequint.com
+  source: "The Quint's WebQoof fact-check desk; IFCN signatory."
+- domain: altnews.in
+  source: "Alt News (India); IFCN signatory."
+- domain: factly.in
+  source: "FACTLY (India); IFCN signatory."
+- domain: africacheck.org
+  source: "Africa Check; IFCN signatory."
+- domain: pesacheck.org
+  source: "PesaCheck (East Africa); IFCN signatory."

@@ -1,0 +1,75 @@
+# Independent outlets used by the corroboration investigator to decide whether
+# a story is confirmed by multiple credible sources. Each entry is a wire
+# service or an outlet with a published editorial standards / corrections
+# policy. Being on this list means "treat as an independent corroborating
+# outlet"; it does NOT mean "always correct" — the scorer caps per-source
+# contribution, and corroboration requires multiple distinct outlets.
+#
+# Deliberately short and conservative. Expanding the list widens coverage but
+# dilutes the signal — err on the side of "well-known wire service or
+# newspaper of record with a corrections policy".
+
+# Wire services (highest tier — multiple outlets re-reporting the same wire
+# count as ONE source via tldextract registrable-domain grouping).
+- domain: apnews.com
+  tier: wire
+  source: "Associated Press — wire service with a published Statement of News Values."
+- domain: reuters.com
+  tier: wire
+  source: "Reuters — wire service, Thomson Reuters Trust Principles."
+- domain: afp.com
+  tier: wire
+  source: "Agence France-Presse — wire service with a published code of ethics."
+- domain: bloomberg.com
+  tier: wire
+  source: "Bloomberg News — wire service with a published Way of Life / standards."
+
+# Newspapers of record / major broadcasters with published standards.
+- domain: nytimes.com
+  tier: newspaper
+  source: "The New York Times — public Standards and Ethics policy."
+- domain: washingtonpost.com
+  tier: newspaper
+  source: "The Washington Post — public Standards and Ethics policy."
+- domain: wsj.com
+  tier: newspaper
+  source: "The Wall Street Journal — Dow Jones Code of Conduct."
+- domain: ft.com
+  tier: newspaper
+  source: "Financial Times — Editorial Code of Practice."
+- domain: economist.com
+  tier: newspaper
+  source: "The Economist — published style and ethics guide."
+- domain: theguardian.com
+  tier: newspaper
+  source: "The Guardian — Editorial Code."
+- domain: bbc.co.uk
+  tier: broadcaster
+  source: "BBC — Editorial Guidelines."
+- domain: npr.org
+  tier: broadcaster
+  source: "NPR — Ethics Handbook."
+- domain: pbs.org
+  tier: broadcaster
+  source: "PBS — Editorial Standards and Practices."
+- domain: cbc.ca
+  tier: broadcaster
+  source: "CBC/Radio-Canada — Journalistic Standards and Practices."
+- domain: abc.net.au
+  tier: broadcaster
+  source: "ABC Australia — Editorial Policies."
+- domain: dw.com
+  tier: broadcaster
+  source: "Deutsche Welle — Code of Conduct."
+- domain: aljazeera.com
+  tier: broadcaster
+  source: "Al Jazeera — Code of Ethics."
+- domain: lemonde.fr
+  tier: newspaper
+  source: "Le Monde — charte d'éthique."
+- domain: elpais.com
+  tier: newspaper
+  source: "El País — libro de estilo."
+- domain: spiegel.de
+  tier: newspaper
+  source: "Der Spiegel — published editorial guidelines."

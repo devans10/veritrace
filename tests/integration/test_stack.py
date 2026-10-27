@@ -89,22 +89,20 @@ def test_audit_chain_for_case():
     d = httpx.get(f"{API}/v1/cases/{case['id']}/audit").json()
     assert d["entries_valid"] and d["chain_valid"], d["chain_detail"]
     events = [e["event_type"] for e in d["entries"]]
-    # Pipeline (dev stack uses fake LLM/factcheck): capture → extract → investigate → complete.
-    expected = [
+    # Pipeline: capture → extract → investigate → complete, with 4 investigators.
+    assert events[:5] == [
         "case.created",
         "stage.started",
         "capture.stored",
         "archive.requested",
         "stage.transition",
-        "stage.started",
-        "extract.completed",
-        "stage.transition",
-        "investigators.fan_out",
-        "investigator.started",
-        "investigator.finished",
-        "stage.transition",
     ]
-    assert events == expected, events
+    assert "extract.completed" in events
+    assert events.count("investigators.fan_out") == 1
+    # Four investigators each produce start/finish, so we see 4 of each.
+    assert events.count("investigator.started") == 4
+    assert events.count("investigator.finished") == 4
+    assert events[-1] == "stage.transition"
 
 
 def test_text_submission_skips_capture_and_completes():

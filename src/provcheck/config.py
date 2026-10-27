@@ -132,6 +132,21 @@ class Settings(BaseSettings):
     google_api_key: SecretStr = SecretStr("")
     factcheck_base_url: str = "https://factchecktools.googleapis.com"
 
+    # --- Source curated lists (satire / fact-checkers / reputation) ------------
+    sources_dir: str = "config/sources"
+
+    # --- Domain info (RDAP) -----------------------------------------------------
+    domaininfo_provider: Literal["rdap", "none"] = "rdap"
+    rdap_bootstrap_url: str = "https://rdap.iana.org/domain"
+
+    # --- Reverse image search ---------------------------------------------------
+    # local_phash computes pHashes for every image in a capture and compares
+    # against prior captures stored in the DB. The index is self-building, so the
+    # first cases return `no_results` entries.
+    reverse_image_provider: Literal["local_phash", "none"] = "local_phash"
+    phash_similarity_threshold: int = 8  # hamming distance; 0 = identical, 64 = maximum
+    phash_max_images_per_case: int = 20
+
     # --- API ------------------------------------------------------------------
     max_url_length: int = 2048
     result_cache_ttl_s: int = 6 * 3600

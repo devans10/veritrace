@@ -7,6 +7,9 @@ from collections.abc import Callable
 from typing import Any
 
 from provcheck.core.investigators.claimcheck import run_claimcheck
+from provcheck.core.investigators.corroboration import run_corroboration
+from provcheck.core.investigators.provenance import run_provenance
+from provcheck.core.investigators.source import run_source
 from provcheck.core.pipeline.capture import run_archive_poll, run_capture
 from provcheck.core.pipeline.extract import run_extract
 from provcheck.core.pipeline.orchestrator import run_fan_out
@@ -33,12 +36,27 @@ def _claimcheck(p: dict[str, Any]) -> None:
     run_claimcheck(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
 
 
+def _provenance(p: dict[str, Any]) -> None:
+    run_provenance(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
+def _source(p: dict[str, Any]) -> None:
+    run_source(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
+def _corroboration(p: dict[str, Any]) -> None:
+    run_corroboration(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
 TASKS: dict[str, Callable[[dict[str, Any]], None]] = {
     "pipeline.capture": _capture,
     "pipeline.archive_poll": _archive_poll,
     "pipeline.extract": _extract,
     "pipeline.fan_out": _fan_out,
     "investigator.claimcheck": _claimcheck,
+    "investigator.provenance": _provenance,
+    "investigator.source": _source,
+    "investigator.corroboration": _corroboration,
 }
 
 
