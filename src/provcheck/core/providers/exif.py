@@ -51,19 +51,13 @@ class PillowExifReader:
                 # Pillow splits EXIF into the primary IFD (0th) and sub-IFDs; most
                 # user-level tags (DateTimeOriginal, LensModel, etc.) live in the
                 # Exif IFD at tag 0x8769.
-                exif_subifd: dict[Any, Any] = (
-                    dict(raw_exif.get_ifd(0x8769)) if raw_exif else {}
-                )
-                gps_block: dict[Any, Any] = (
-                    dict(raw_exif.get_ifd(0x8825)) if raw_exif else {}
-                )
+                exif_subifd: dict[Any, Any] = dict(raw_exif.get_ifd(0x8769)) if raw_exif else {}
+                gps_block: dict[Any, Any] = dict(raw_exif.get_ifd(0x8825)) if raw_exif else {}
         except Exception as e:
             raise ProviderError(f"could not read image: {e}") from e
 
         exif: dict[str, Any] = (
-            {ExifTags.TAGS.get(k, str(k)): v for k, v in dict(raw_exif).items()}
-            if raw_exif
-            else {}
+            {ExifTags.TAGS.get(k, str(k)): v for k, v in dict(raw_exif).items()} if raw_exif else {}
         )
         for k, v in exif_subifd.items():
             exif[ExifTags.TAGS.get(k, str(k))] = v

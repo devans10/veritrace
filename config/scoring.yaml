@@ -1,0 +1,140 @@
+# Scoring configuration — version 1.
+#
+# How to read this file:
+#   - `signals` lists every signal name an investigator may emit. Each entry
+#     declares its weight, family, category hint, and the maximum absolute
+#     contribution it can make (`cap`). Signals an investigator emits that are
+#     NOT listed here are logged and ignored (weight 0).
+#   - `families` lists the per-family absolute-contribution caps. Family caps
+#     bound how much any one investigator can move the band.
+#   - `bias` is the global offset added to the sum of contributions before
+#     mapping to a risk band.
+#   - `bands` is the risk-threshold table used to map the final logit to a
+#     band label.
+#
+# Contribution math (see src/provcheck/core/scoring/scorer.py):
+#   c_i   = weight_s * sign(direction) * strength * confidence   (0 for neutral)
+#   c_i' = clamp(c_i, -cap_s, +cap_s)                            (per-signal cap)
+#   per-family total | f = clamp(sum c_i' in f, -cap_f, +cap_f)  (per-family cap)
+#   credibility_logit = bias + sum of per-family totals
+#   risk = sigmoid(-credibility_logit)
+#
+# Coverage gate:
+#   if (families with non-neutral evidence) < 2  OR  abs(sum c_i') < 0.3
+#       -> band is forced to "uncertain", confidence_level="low"
+#
+# The scorer_version field is embedded in every Score row. Bumping it
+# invalidates the result-cache (so a rerun recomputes against the new weights).
+
+scorer_version: "scoring-v1-2026-10"
+bias: 0.0
+
+bands:
+  low_risk_upper: 0.30     # risk <= 0.30  -> low_risk
+  high_risk_lower: 0.70    # risk >= 0.70  -> high_risk
+  # otherwise -> uncertain
+
+coverage_gate:
+  min_families: 2
+  min_abs_sum: 0.3
+
+families:
+  provenance:
+    cap: 2.0
+  source:
+    cap: 2.0
+  claim:
+    cap: 2.5
+  corroboration:
+    cap: 2.0
+  media:
+    cap: 2.0
+
+signals:
+  # ----- Fact-check (step 2) -----
+  factcheck.claimreview_false:
+    weight: 1.0
+    family: claim
+    category: fabricated
+    cap: 1.5
+  factcheck.claimreview_true:
+    weight: 1.0
+    family: claim
+    category: corroborated
+    cap: 1.5
+  factcheck.claimreview_mixed:
+    weight: 0.2
+    family: claim
+    category: null
+    cap: 0.4
+
+  # ----- Provenance (step 3) -----
+  provenance.earliest_appearance:
+    weight: 0.9
+    family: provenance
+    category: misleading_context
+    cap: 1.2
+  provenance.archive_earliest:
+    weight: 0.0  # neutral/informational — captures that the URL has history
+    family: provenance
+    category: null
+    cap: 0.0
+  provenance.earlier_copy:
+    weight: 0.8
+    family: provenance
+    category: misleading_context
+    cap: 1.2
+
+  # ----- Source (step 3) -----
+  source.satire_domain:
+    weight: 0.6
+    family: source
+    category: satire
+    cap: 0.8
+  source.reputable_outlet:
+    weight: 0.5
+    family: source
+    category: corroborated
+    cap: 0.8
+  source.domain_age_lt_30d:
+    weight: 1.0
+    family: source
+    category: fabricated
+    cap: 1.4
+  source.domain_age_established:
+    weight: 0.3
+    family: source
+    category: null
+    cap: 0.5
+
+  # ----- Corroboration (step 3) -----
+  corroboration.independent_outlets:
+    weight: 1.2
+    family: corroboration
+    category: corroborated
+    cap: 1.8
+
+  # ----- Media (step 4) -----
+  media.c2pa_valid:
+    weight: 0.9
+    family: media
+    category: corroborated
+    cap: 1.4
+  media.c2pa_invalid:
+    weight: 1.0
+    family: media
+    category: fabricated
+    cap: 1.4
+  media.exif_date_mismatch:
+    weight: 0.8
+    family: media
+    category: misleading_context
+    cap: 1.0
+  media.ela:
+    # Informational — scorer weights ELA at 0 (false positives on compressed
+    # JPEGs are too high for a band-level signal). The diff artifact still
+    # appears in the report for human review.
+    weight: 0.0
+    family: media
+    category: null
+    cap: 0.0

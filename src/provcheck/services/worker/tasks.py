@@ -14,6 +14,7 @@ from provcheck.core.investigators.source import run_source
 from provcheck.core.pipeline.capture import run_archive_poll, run_capture
 from provcheck.core.pipeline.extract import run_extract
 from provcheck.core.pipeline.orchestrator import run_fan_out
+from provcheck.core.pipeline.scoring_stage import run_score
 from provcheck.core.providers.registry import get_providers
 
 
@@ -53,11 +54,16 @@ def _media(p: dict[str, Any]) -> None:
     run_media(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
 
 
+def _score(p: dict[str, Any]) -> None:
+    run_score(uuid.UUID(p["case_id"]), get_providers())
+
+
 TASKS: dict[str, Callable[[dict[str, Any]], None]] = {
     "pipeline.capture": _capture,
     "pipeline.archive_poll": _archive_poll,
     "pipeline.extract": _extract,
     "pipeline.fan_out": _fan_out,
+    "pipeline.score": _score,
     "investigator.claimcheck": _claimcheck,
     "investigator.provenance": _provenance,
     "investigator.source": _source,

@@ -19,19 +19,22 @@ from provcheck.core.interfaces import Queue
 
 log = logging.getLogger(__name__)
 
-# Pipeline for v0.1: capture (URL only) → extract → investigate → complete.
-# Text submissions skip capture and start at extracting (set by the API).
+# Pipeline for v0.1: capture (URL only) → extract → investigate → score → complete.
+# Text submissions skip capture; upload submissions skip capture + extract
+# (API starts them at `investigating`).
 NEXT_STAGE: dict[str, str] = {
     "queued": "capturing",
     "capturing": "extracting",
     "extracting": "investigating",
-    "investigating": "complete",
+    "investigating": "scoring",
+    "scoring": "complete",
 }
 # stage -> (task name, queue, timeout seconds)
 STAGE_TASKS: dict[str, tuple[str, str, int]] = {
     "capturing": ("pipeline.capture", "capture", 180),
     "extracting": ("pipeline.extract", "extract", 120),
     "investigating": ("pipeline.fan_out", "orchestrator", 60),
+    "scoring": ("pipeline.score", "scoring", 60),
 }
 TERMINAL = frozenset({"complete", "failed"})
 TERMINAL_RUN = frozenset({"done", "failed", "skipped"})
@@ -88,7 +91,7 @@ def advance(session: Session, case_id: uuid.UUID, finished: str) -> str | None:
 
 def advance_investigation(session: Session, case_id: uuid.UUID) -> str | None:
     """Called after each investigator run finishes. If every expected run is terminal,
-    moves the case from 'investigating' to 'complete'. Idempotent under row lock."""
+    moves the case from 'investigating' to 'scoring'. Idempotent under row lock."""
     case = session.get(Case, case_id, with_for_update=True)
     if case is None or case.status != "investigating":
         return None
@@ -99,18 +102,18 @@ def advance_investigation(session: Session, case_id: uuid.UUID) -> str | None:
         return None
     if any(present[inv] not in TERMINAL_RUN for inv in expected):
         return None
-    case.status = "complete"
+    case.status = "scoring"
     audit.append(
         session,
         "stage.transition",
         {
             "from": "investigating",
-            "to": "complete",
+            "to": "scoring",
             "runs": {inv: present[inv] for inv in expected},
         },
         case_id=case_id,
     )
-    return "complete"
+    return "scoring"
 
 
 def fail_case(session: Session, case_id: uuid.UUID, stage: str, reason: str, detail: str) -> None:

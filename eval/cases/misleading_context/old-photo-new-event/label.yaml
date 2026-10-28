@@ -1,0 +1,21 @@
+category: misleading_context
+expected_band: uncertain
+rationale: >
+  Real photo but EXIF date is three years before the article's claimed
+  publication date, and the exact-phrase caption appears on an earlier
+  posting. Classic misleading-context pattern.
+evidence:
+  - investigator: media
+    signal: media.exif_date_mismatch
+    direction: undermines
+    strength: 0.7
+    confidence: 0.7
+    category_hint: misleading_context
+    finding: "EXIF 2023-04-10 vs article 2026-03-14 (1069 days)."
+  - investigator: provenance
+    signal: provenance.earliest_appearance
+    direction: undermines
+    strength: 0.6
+    confidence: 0.6
+    category_hint: misleading_context
+    finding: "Exact-phrase hit found on 2023-04-11, 3 years before this article."

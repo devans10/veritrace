@@ -16,7 +16,7 @@ from provcheck.core.db import audit
 from provcheck.core.db.models import Case, InvestigatorRun
 from provcheck.core.db.session import session_scope
 from provcheck.core.pipeline import state
-from provcheck.core.providers.registry import Providers
+from provcheck.core.providers.registry import Providers, get_providers
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +91,10 @@ def finish_run(
     providers_used: dict[str, str] | None = None,
     counts: dict[str, int] | None = None,
 ) -> None:
-    """Mark a run terminal (done|failed|skipped) and advance the case if all runs are terminal."""
+    """Mark a run terminal (done|failed|skipped). If every investigator run is
+    terminal, advance the case to ``scoring`` and enqueue the scoring task.
+    """
+    advanced_to: str | None = None
     with session_scope() as s:
         run = s.get(InvestigatorRun, run_id, with_for_update=True)
         if run is None or run.status in state.TERMINAL_RUN:
@@ -112,4 +115,6 @@ def finish_run(
             },
             case_id=case_id,
         )
-        state.advance_investigation(s, case_id)
+        advanced_to = state.advance_investigation(s, case_id)
+    if advanced_to:
+        state.enqueue_stage(get_providers().queue, case_id, advanced_to)

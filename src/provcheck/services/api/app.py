@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from provcheck import logging_setup
 from provcheck.config import get_settings
 from provcheck.core.db import audit
-from provcheck.core.db.models import Artifact, AuditLog, Capture, Case
+from provcheck.core.db.models import Artifact, AuditLog, Capture, Case, Report
 from provcheck.core.db.session import get_sessionmaker
 from provcheck.core.models.case import (
     ArtifactOut,
@@ -29,8 +32,12 @@ from provcheck.core.models.case import (
 )
 from provcheck.core.pipeline import state
 from provcheck.core.providers.registry import Providers, get_providers
+from provcheck.core.report import DISCLAIMER
 from provcheck.core.security.ssrf import BlockedURL, URLPolicy, validate_url
 from provcheck.core.security.uploads import UploadRejected, validate_upload
+
+TEMPLATE_DIR = Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 log = logging.getLogger(__name__)
 
@@ -118,80 +125,14 @@ def create_app() -> FastAPI:
         providers: Providers = Depends(providers_dep),
     ) -> CaseOut:
         if body.text is not None:
-            case = Case(
-                id=uuid.uuid4(),
-                input_type="text",
-                input_text=body.text,
-                # Cache key over the text so pasted-text submissions dedupe too.
-                cache_key=hashlib.sha256(body.text.encode()).hexdigest(),
-                status="extracting",  # skip capture; go straight to extraction
-                archive_opt_out=True,
-            )
-            session.add(case)
-            session.flush()
-            audit.append(
-                session,
-                "case.created",
-                {"input_type": "text", "chars": len(body.text)},
-                case_id=case.id,
-            )
-            session.commit()
-            state.enqueue_stage(providers.queue, case.id, "extracting")
-            session.refresh(case)
-            return _case_out(session, case)
-
+            return _case_out(session, _create_text_case(session, providers, body))
         assert body.url is not None  # model_validator guarantees exactly one input
-        policy = URLPolicy.from_settings(settings)
-        try:
-            target = asyncio.run(validate_url(body.url, policy))
-        except BlockedURL as e:
-            raise HTTPException(422, detail=f"URL not allowed: {e.reason}") from e
-        cache_key = hashlib.sha256(target.url.encode()).hexdigest()
-
-        if not body.refresh:
-            cutoff = datetime.now(UTC) - timedelta(seconds=settings.result_cache_ttl_s)
-            cached = session.execute(
-                select(Case)
-                .where(
-                    Case.cache_key == cache_key,
-                    Case.status == "complete",
-                    Case.created_at >= cutoff,
-                )
-                .order_by(Case.created_at.desc())
-                .limit(1)
-            ).scalar_one_or_none()
-            if cached is not None:
-                response.status_code = 200
-                out = _case_out(session, cached)
-                out.cached = True
-                return out
-
-        case = Case(
-            id=uuid.uuid4(),
-            input_type="url",
-            input_url=body.url,
-            normalized_url=target.url,
-            cache_key=cache_key,
-            status="queued",
-            archive_opt_out=not body.archive,
-        )
-        session.add(case)
-        session.flush()
-        audit.append(
-            session,
-            "case.created",
-            {
-                "input_type": "url",
-                "url": body.url,
-                "normalized_url": target.url,
-                "archive": body.archive,
-            },
-            case_id=case.id,
-        )
-        session.commit()  # commit before enqueue so the worker sees the row
-        # queued -> capturing happens inside the capture task under a row lock.
-        state.enqueue_stage(providers.queue, case.id, "capturing")
-        session.refresh(case)
+        case, cached = _create_url_case_or_hit_cache(session, providers, settings, body)
+        if cached:
+            response.status_code = 200
+            out = _case_out(session, case)
+            out.cached = True
+            return out
         return _case_out(session, case)
 
     @app.post("/v1/cases/upload", status_code=202, response_model=CaseOut)
@@ -200,63 +141,7 @@ def create_app() -> FastAPI:
         session: Session = Depends(get_session),
         providers: Providers = Depends(providers_dep),
     ) -> CaseOut:
-        raw = await file.read(settings.upload_max_bytes + 1)
-        try:
-            v = validate_upload(
-                raw,
-                max_bytes=settings.upload_max_bytes,
-                allowed_mimes=settings.upload_allowed_mimes,
-            )
-        except UploadRejected as e:
-            raise HTTPException(422, detail=f"upload rejected: {e}") from e
-
-        store = providers.object_store
-        obj = await store.put(v.data, content_type=v.detected_mime, prefix="uploads")
-        from provcheck.core.providers.local_phash import compute_phash
-
-        try:
-            phash = compute_phash(v.data) if v.detected_mime.startswith("image/") else None
-        except Exception:
-            phash = None
-
-        artifact = Artifact(
-            id=uuid.uuid4(),
-            case_id=uuid.UUID(int=0),  # overwritten below after case exists
-            kind="media",
-            object_key=obj.key,
-            sha256=obj.sha256,
-            size=obj.size,
-            mime=v.detected_mime,
-            phash=phash,
-        )
-        cache_key = hashlib.sha256(obj.sha256.encode()).hexdigest()
-        case = Case(
-            id=uuid.uuid4(),
-            input_type="upload",
-            cache_key=cache_key,
-            status="investigating",  # skip capture + extract; media investigator does the work
-            archive_opt_out=True,
-        )
-        session.add(case)
-        session.flush()
-        artifact.case_id = case.id
-        session.add(artifact)
-        session.flush()
-        case.upload_artifact_id = artifact.id
-        audit.append(
-            session,
-            "case.created",
-            {
-                "input_type": "upload",
-                "detected_mime": v.detected_mime,
-                "size": v.size,
-                "sha256": obj.sha256,
-            },
-            case_id=case.id,
-        )
-        session.commit()
-        state.enqueue_stage(providers.queue, case.id, "investigating")
-        session.refresh(case)
+        case = await _create_upload_case(session, providers, settings, file)
         return _case_out(session, case)
 
     @app.get("/v1/cases/{case_id}", response_model=CaseOut)
@@ -286,6 +171,112 @@ def create_app() -> FastAPI:
             media_type=SAFE_MIME.get(art.kind, "application/octet-stream"),
             headers=headers,
         )
+
+    @app.get("/v1/cases/{case_id}/report.json")
+    def get_report_json(
+        case_id: uuid.UUID,
+        session: Session = Depends(get_session),
+        providers: Providers = Depends(providers_dep),
+    ) -> Response:
+        report_row = _latest_report(session, case_id)
+        if report_row is None:
+            raise HTTPException(404, "no report (case may still be scoring, or has failed)")
+        art = session.get(Artifact, report_row.artifact_id)
+        if art is None:
+            raise HTTPException(500, "report artifact missing")
+        data = asyncio.run(providers.object_store.get(art.object_key))
+        return Response(
+            content=data,
+            media_type="application/json",
+            headers={"X-Content-Type-Options": "nosniff", "X-Content-SHA256": art.sha256},
+        )
+
+    @app.get("/v1/cases/{case_id}/report", response_class=HTMLResponse)
+    def get_report_html(
+        case_id: uuid.UUID,
+        request: Request,
+        session: Session = Depends(get_session),
+        providers: Providers = Depends(providers_dep),
+    ) -> HTMLResponse:
+        case = session.get(Case, case_id)
+        if case is None:
+            raise HTTPException(404, "case not found")
+        report_doc = _load_report_doc(session, providers, case_id)
+        return templates.TemplateResponse(
+            request, "_case_fragment.html", {"case": case, "report": report_doc}
+        )
+
+    @app.get("/", response_class=HTMLResponse)
+    def home(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(request, "index.html", {"disclaimer": DISCLAIMER})
+
+    @app.get("/cases/{case_id}", response_class=HTMLResponse)
+    def ui_case(
+        case_id: uuid.UUID,
+        request: Request,
+        session: Session = Depends(get_session),
+        providers: Providers = Depends(providers_dep),
+    ) -> HTMLResponse:
+        case = session.get(Case, case_id)
+        if case is None:
+            raise HTTPException(404, "case not found")
+        report_doc = (
+            _load_report_doc(session, providers, case_id)
+            if case.status in ("complete", "failed")
+            else None
+        )
+        return templates.TemplateResponse(
+            request, "case.html", {"case": case, "report": report_doc}
+        )
+
+    @app.get("/ui/cases/{case_id}/fragment", response_class=HTMLResponse)
+    def ui_case_fragment(
+        case_id: uuid.UUID,
+        request: Request,
+        session: Session = Depends(get_session),
+        providers: Providers = Depends(providers_dep),
+    ) -> HTMLResponse:
+        case = session.get(Case, case_id)
+        if case is None:
+            raise HTTPException(404, "case not found")
+        report_doc = (
+            _load_report_doc(session, providers, case_id)
+            if case.status in ("complete", "failed")
+            else None
+        )
+        return templates.TemplateResponse(
+            request, "_case_fragment.html", {"case": case, "report": report_doc}
+        )
+
+    @app.post("/ui/submit-url")
+    def ui_submit_url(
+        url: str = Form(...),
+        archive: bool = Form(False),
+        session: Session = Depends(get_session),
+        providers: Providers = Depends(providers_dep),
+    ) -> RedirectResponse:
+        body = CaseCreate(url=url, archive=archive)
+        case = _create_url_case(session, providers, settings, body)
+        return RedirectResponse(url=f"/cases/{case.id}", status_code=303)
+
+    @app.post("/ui/submit-text")
+    def ui_submit_text(
+        text_body: str = Form(..., alias="text"),
+        session: Session = Depends(get_session),
+        providers: Providers = Depends(providers_dep),
+    ) -> RedirectResponse:
+        body = CaseCreate(text=text_body)
+        case = _create_text_case(session, providers, body)
+        return RedirectResponse(url=f"/cases/{case.id}", status_code=303)
+
+    @app.post("/ui/submit-upload")
+    async def ui_submit_upload(
+        file: UploadFile = File(...),
+        session: Session = Depends(get_session),
+        providers: Providers = Depends(providers_dep),
+    ) -> RedirectResponse:
+        case = await _create_upload_case(session, providers, settings, file)
+        return RedirectResponse(url=f"/cases/{case.id}", status_code=303)
 
     @app.get("/v1/cases/{case_id}/audit", response_model=AuditOut)
     def get_audit(case_id: uuid.UUID, session: Session = Depends(get_session)) -> AuditOut:
@@ -375,6 +366,183 @@ def _case_out(session: Session, case: Case) -> CaseOut:
         error=case.error,
         captures=out_caps,
     )
+
+
+# -------------- Case-creation helpers (shared by JSON API + UI) ---------------
+
+
+def _create_text_case(session: Session, providers: Providers, body: CaseCreate) -> Case:
+    assert body.text is not None
+    case = Case(
+        id=uuid.uuid4(),
+        input_type="text",
+        input_text=body.text,
+        cache_key=hashlib.sha256(body.text.encode()).hexdigest(),
+        status="extracting",
+        archive_opt_out=True,
+    )
+    session.add(case)
+    session.flush()
+    audit.append(
+        session,
+        "case.created",
+        {"input_type": "text", "chars": len(body.text)},
+        case_id=case.id,
+    )
+    session.commit()
+    state.enqueue_stage(providers.queue, case.id, "extracting")
+    session.refresh(case)
+    return case
+
+
+def _create_url_case_or_hit_cache(
+    session: Session,
+    providers: Providers,
+    settings_obj: object,
+    body: CaseCreate,
+) -> tuple[Case, bool]:
+    """Returns (case, cached_hit)."""
+    assert body.url is not None
+    policy = URLPolicy.from_settings(settings_obj)
+    try:
+        target = asyncio.run(validate_url(body.url, policy))
+    except BlockedURL as e:
+        raise HTTPException(422, detail=f"URL not allowed: {e.reason}") from e
+    cache_key = hashlib.sha256(target.url.encode()).hexdigest()
+
+    if not body.refresh:
+        ttl = getattr(settings_obj, "result_cache_ttl_s", 0)
+        cutoff = datetime.now(UTC) - timedelta(seconds=ttl)
+        cached = session.execute(
+            select(Case)
+            .where(
+                Case.cache_key == cache_key,
+                Case.status == "complete",
+                Case.created_at >= cutoff,
+            )
+            .order_by(Case.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if cached is not None:
+            return cached, True
+
+    case = Case(
+        id=uuid.uuid4(),
+        input_type="url",
+        input_url=body.url,
+        normalized_url=target.url,
+        cache_key=cache_key,
+        status="queued",
+        archive_opt_out=not body.archive,
+    )
+    session.add(case)
+    session.flush()
+    audit.append(
+        session,
+        "case.created",
+        {
+            "input_type": "url",
+            "url": body.url,
+            "normalized_url": target.url,
+            "archive": body.archive,
+        },
+        case_id=case.id,
+    )
+    session.commit()
+    state.enqueue_stage(providers.queue, case.id, "capturing")
+    session.refresh(case)
+    return case, False
+
+
+def _create_url_case(
+    session: Session, providers: Providers, settings_obj: object, body: CaseCreate
+) -> Case:
+    """UI wrapper: ignore the cache hit (always refresh) so the user never lands
+    on a stale case id. The /v1 JSON endpoint still honors the cache."""
+    body = body.model_copy(update={"refresh": True})
+    case, _ = _create_url_case_or_hit_cache(session, providers, settings_obj, body)
+    return case
+
+
+async def _create_upload_case(
+    session: Session, providers: Providers, settings_obj: object, file: UploadFile
+) -> Case:
+    max_bytes: int = getattr(settings_obj, "upload_max_bytes", 25 * 1024 * 1024)
+    allowed: list[str] = getattr(settings_obj, "upload_allowed_mimes", [])
+    raw = await file.read(max_bytes + 1)
+    try:
+        v = validate_upload(raw, max_bytes=max_bytes, allowed_mimes=allowed)
+    except UploadRejected as e:
+        raise HTTPException(422, detail=f"upload rejected: {e}") from e
+
+    obj = await providers.object_store.put(v.data, content_type=v.detected_mime, prefix="uploads")
+    from provcheck.core.providers.local_phash import compute_phash
+
+    try:
+        phash = compute_phash(v.data) if v.detected_mime.startswith("image/") else None
+    except Exception:
+        phash = None
+
+    case = Case(
+        id=uuid.uuid4(),
+        input_type="upload",
+        cache_key=hashlib.sha256(obj.sha256.encode()).hexdigest(),
+        status="investigating",
+        archive_opt_out=True,
+    )
+    session.add(case)
+    session.flush()
+    artifact = Artifact(
+        id=uuid.uuid4(),
+        case_id=case.id,
+        kind="media",
+        object_key=obj.key,
+        sha256=obj.sha256,
+        size=obj.size,
+        mime=v.detected_mime,
+        phash=phash,
+    )
+    session.add(artifact)
+    session.flush()
+    case.upload_artifact_id = artifact.id
+    audit.append(
+        session,
+        "case.created",
+        {
+            "input_type": "upload",
+            "detected_mime": v.detected_mime,
+            "size": v.size,
+            "sha256": obj.sha256,
+        },
+        case_id=case.id,
+    )
+    session.commit()
+    state.enqueue_stage(providers.queue, case.id, "investigating")
+    session.refresh(case)
+    return case
+
+
+def _latest_report(session: Session, case_id: uuid.UUID) -> Report | None:
+    return session.execute(
+        select(Report).where(Report.case_id == case_id).order_by(Report.created_at.desc()).limit(1)
+    ).scalar_one_or_none()
+
+
+def _load_report_doc(
+    session: Session, providers: Providers, case_id: uuid.UUID
+) -> dict[str, object] | None:
+    row = _latest_report(session, case_id)
+    if row is None:
+        return None
+    art = session.get(Artifact, row.artifact_id)
+    if art is None:
+        return None
+    data = asyncio.run(providers.object_store.get(art.object_key))
+    try:
+        parsed = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 app = create_app()

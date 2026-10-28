@@ -17,6 +17,7 @@ COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app/src /app/src
 COPY alembic.ini ./
 COPY migrations ./migrations
+COPY config ./config
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 USER app
 CMD ["uvicorn", "provcheck.services.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

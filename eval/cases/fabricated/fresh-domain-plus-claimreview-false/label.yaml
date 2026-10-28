@@ -1,0 +1,20 @@
+category: fabricated
+expected_band: high_risk
+rationale: >
+  Domain registered 12 days ago, AP Fact Check rated the claim False, no
+  independent outlets picked it up. Strong undermines across two families.
+evidence:
+  - investigator: source
+    signal: source.domain_age_lt_30d
+    direction: undermines
+    strength: 0.9
+    confidence: 0.8
+    category_hint: fabricated
+    finding: "example-news-247.com registered 12 days ago."
+  - investigator: claimcheck
+    signal: factcheck.claimreview_false
+    direction: undermines
+    strength: 0.9
+    confidence: 0.8
+    category_hint: fabricated
+    finding: "AP Fact Check rated this False."

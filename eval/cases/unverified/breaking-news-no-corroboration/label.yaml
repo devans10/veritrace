@@ -1,0 +1,14 @@
+category: unverified
+expected_band: uncertain
+rationale: >
+  Breaking news with insufficient evidence either way: not on any fact-check
+  database, no corroborating outlets yet, source is a mid-sized but not
+  tracked outlet. Coverage gate kicks in — fewer than 2 families with
+  non-neutral evidence.
+evidence:
+  - investigator: provenance
+    signal: provenance.archive_earliest
+    direction: neutral
+    strength: 0.4
+    confidence: 0.8
+    finding: "First Wayback capture 20 minutes ago."

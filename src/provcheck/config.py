@@ -164,6 +164,9 @@ class Settings(BaseSettings):
     ela_jpeg_quality: int = 90  # Re-save quality for Error Level Analysis
     detector_provider: Literal["none"] = "none"  # No AI-image detector enabled in v0.1
 
+    # --- Scoring ----------------------------------------------------------------
+    scoring_config_path: str = "config/scoring.yaml"
+
     # --- API ------------------------------------------------------------------
     max_url_length: int = 2048
     result_cache_ttl_s: int = 6 * 3600

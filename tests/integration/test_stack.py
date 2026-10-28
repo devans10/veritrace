@@ -89,7 +89,7 @@ def test_audit_chain_for_case():
     d = httpx.get(f"{API}/v1/cases/{case['id']}/audit").json()
     assert d["entries_valid"] and d["chain_valid"], d["chain_detail"]
     events = [e["event_type"] for e in d["entries"]]
-    # Pipeline: capture → extract → investigate → complete, with 4 investigators.
+    # Pipeline: capture → extract → investigate → score → complete, 5 investigators.
     assert events[:5] == [
         "case.created",
         "stage.started",
@@ -99,10 +99,55 @@ def test_audit_chain_for_case():
     ]
     assert "extract.completed" in events
     assert events.count("investigators.fan_out") == 1
-    # Five investigators each produce start/finish, so we see 5 of each.
     assert events.count("investigator.started") == 5
     assert events.count("investigator.finished") == 5
+    assert "score.computed" in events
+    assert "report.built" in events
     assert events[-1] == "stage.transition"
+
+
+def test_full_dod_url_case_produces_report():
+    """The v0.1 definition of done: submit a URL, get a report with a band,
+    extracted claims (empty under fakes), evidence from investigators (even if
+    just unverified entries), and a could-not-verify list."""
+    case = wait(submit(fresh("/article.html"))["id"])
+    assert case["status"] == "complete", case["error"]
+
+    report = httpx.get(f"{API}/v1/cases/{case['id']}/report.json", timeout=10).json()
+    assert report["schema_version"].startswith("report-schema-")
+    assert "disclaimer" in report
+    assert report["assessment"]["band"] in ("low_risk", "uncertain", "high_risk")
+    assert report["assessment"]["confidence_level"] in ("low", "medium", "high")
+    assert report["assessment"]["scorer_version"].startswith("scoring-")
+    assert "config_sha256" in report["assessment"]
+    # Capture + at least one investigator with an unverified entry (detectors
+    # are always listed as not_configured, so this list is never empty).
+    assert len(report["captures"]) >= 1
+    assert "evidence_by_investigator" in report
+    unverified_total = sum(
+        len(v) for v in report["unverified_by_investigator"].values()
+    )
+    assert unverified_total >= 1, report["unverified_by_investigator"]
+
+    # HTML UI endpoints respond with 200 for a known case.
+    html = httpx.get(f"{API}/cases/{case['id']}", timeout=10)
+    assert html.status_code == 200
+    body = html.text
+    assert "Case" in body and case["id"] in body
+
+
+def test_home_page_renders():
+    r = httpx.get(f"{API}/", timeout=10)
+    assert r.status_code == 200
+    assert "Submit a URL" in r.text
+
+
+def test_report_json_404_before_scoring():
+    # Submit and immediately try to fetch report.json — should 404 until scoring.
+    sub = submit(fresh("/article.html"))
+    r = httpx.get(f"{API}/v1/cases/{sub['id']}/report.json", timeout=10)
+    # Either 404 (not yet) or 200 (already finished — race-dependent).
+    assert r.status_code in (200, 404)
 
 
 def test_text_submission_skips_capture_and_completes():
@@ -147,6 +192,9 @@ def test_upload_submission_runs_media_forensics():
     assert events.count("investigators.fan_out") == 1
     assert events.count("investigator.finished") == 5
     assert "media.wrote" in events
+    # Upload cases also run the scorer + report builder.
+    assert "score.computed" in events
+    assert "report.built" in events
 
 
 def test_upload_rejects_non_image_payload():

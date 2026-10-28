@@ -50,6 +50,8 @@ UNVERIFIED_REASONS = (
     "unsupported_platform",
     "error",
 )
+BANDS = ("low_risk", "uncertain", "high_risk")
+CONFIDENCE_LEVELS = ("low", "medium", "high")
 
 
 def _in(col: str, values: tuple[str, ...]) -> str:
@@ -250,6 +252,41 @@ class UnverifiedItem(Base):
     subject: Mapped[str] = mapped_column(Text)
     reason: Mapped[str] = mapped_column(String(32))
     detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now()
+
+
+class Score(Base):
+    __tablename__ = "scores"
+    __table_args__ = (
+        CheckConstraint(_in("band", BANDS), name="ck_scores_band"),
+        CheckConstraint(_in("confidence_level", CONFIDENCE_LEVELS), name="ck_scores_confidence"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
+    scorer_version: Mapped[str] = mapped_column(String(64))
+    config_sha256: Mapped[str] = mapped_column(String(64))
+    band: Mapped[str] = mapped_column(String(16))
+    confidence_level: Mapped[str] = mapped_column(String(8))
+    raw_logit: Mapped[float] = mapped_column()
+    coverage: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    category_breakdown: Mapped[list[Any]] = mapped_column(default=list)
+    contributions: Mapped[list[Any]] = mapped_column(default=list)
+    created_at: Mapped[datetime] = _now()
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cases.id", ondelete="CASCADE"), index=True
+    )
+    score_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scores.id", ondelete="SET NULL"))
+    artifact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("artifacts.id"))
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = _now()
 
 

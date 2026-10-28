@@ -1,0 +1,13 @@
+category: unverified
+expected_band: uncertain
+rationale: >
+  Only a mixed ClaimReview rating (half true) available. No corroboration,
+  no provenance, no source signal. One family of weak non-neutral evidence
+  is not enough to clear the coverage gate.
+evidence:
+  - investigator: claimcheck
+    signal: factcheck.claimreview_mixed
+    direction: neutral
+    strength: 0.3
+    confidence: 0.6
+    finding: "AFP Fact Check rated this Half true."

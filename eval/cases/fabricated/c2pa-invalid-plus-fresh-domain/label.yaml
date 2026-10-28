@@ -1,0 +1,20 @@
+category: fabricated
+expected_band: high_risk
+rationale: >
+  Image carries a C2PA manifest that fails validation (tampered or improperly
+  signed) and the publishing domain is brand new. Two strong undermines.
+evidence:
+  - investigator: media
+    signal: media.c2pa_invalid
+    direction: undermines
+    strength: 0.9
+    confidence: 0.9
+    category_hint: fabricated
+    finding: "C2PA manifest present but failed validation."
+  - investigator: source
+    signal: source.domain_age_lt_30d
+    direction: undermines
+    strength: 0.8
+    confidence: 0.8
+    category_hint: fabricated
+    finding: "domain registered 7 days ago."

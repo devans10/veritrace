@@ -290,6 +290,16 @@ services:
     healthcheck: *worker-health
     networks: [backend, egress]
 
+  worker-scoring:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-scoring
+      WORKER_QUEUES: scoring
+    healthcheck: *worker-health
+    networks: [backend]
+
 volumes:
   pgdata:
   redisdata:

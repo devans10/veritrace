@@ -73,6 +73,10 @@ services:
       <<: [*fixture-allow, *fakes-env]
     networks: [backend, egress, fixtures]
 
+  worker-scoring:
+    environment:
+      <<: *fakes-env
+
   postgres:
     ports: ["127.0.0.1:55432:5432"]
     networks: [backend, devports]
