@@ -100,9 +100,7 @@ def test_scores_unique_case_id():
 
 def test_cases_expected_investigators_defaults_null():
     cid = _mk_case(conn := _db())
-    row = conn.execute(
-        "SELECT expected_investigators FROM cases WHERE id = %s", (cid,)
-    ).fetchone()
+    row = conn.execute("SELECT expected_investigators FROM cases WHERE id = %s", (cid,)).fetchone()
     assert row is not None
     assert row[0] is None
     conn.close()

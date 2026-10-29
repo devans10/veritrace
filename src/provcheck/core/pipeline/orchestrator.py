@@ -55,9 +55,7 @@ def run_fan_out(case_id: uuid.UUID, providers: Providers) -> None:
                 s,
                 "investigators.fan_out",
                 {
-                    "created": [
-                        {"investigator": inv, "run_id": str(rid)} for inv, rid in created
-                    ],
+                    "created": [{"investigator": inv, "run_id": str(rid)} for inv, rid in created],
                     "expected_investigators": expected,
                 },
                 case_id=case_id,

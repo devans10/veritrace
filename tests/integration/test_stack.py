@@ -131,9 +131,7 @@ def test_full_dod_url_case_produces_report():
     # are always listed as not_configured, so this list is never empty).
     assert len(report["captures"]) >= 1
     assert "evidence_by_investigator" in report
-    unverified_total = sum(
-        len(v) for v in report["unverified_by_investigator"].values()
-    )
+    unverified_total = sum(len(v) for v in report["unverified_by_investigator"].values())
     assert unverified_total >= 1, report["unverified_by_investigator"]
 
     # HTML UI endpoints respond with 200 for a known case.

@@ -60,9 +60,7 @@ def test_advance_waits_on_the_snapshot_not_the_current_investigators(monkeypatch
         "INVESTIGATORS",
         ("claimcheck", "provenance", "source", "corroboration", "media"),
     )
-    case = _Case(
-        status="investigating", expected=["claimcheck", "provenance"]
-    )
+    case = _Case(status="investigating", expected=["claimcheck", "provenance"])
     runs = [_Run("claimcheck", "done"), _Run("provenance", "done")]
     session = _make_session(case, runs)
 
@@ -73,9 +71,7 @@ def test_advance_waits_on_the_snapshot_not_the_current_investigators(monkeypatch
 
 
 def test_advance_waits_when_a_snapshot_investigator_is_still_running(monkeypatch):
-    monkeypatch.setattr(
-        state_module, "INVESTIGATORS", ("claimcheck", "provenance")
-    )
+    monkeypatch.setattr(state_module, "INVESTIGATORS", ("claimcheck", "provenance"))
     case = _Case(status="investigating", expected=["claimcheck", "provenance"])
     runs = [_Run("claimcheck", "done"), _Run("provenance", "running")]
     session = _make_session(case, runs)
@@ -87,9 +83,7 @@ def test_advance_waits_when_a_snapshot_investigator_is_still_running(monkeypatch
 
 
 def test_advance_waits_when_a_snapshot_investigator_has_no_run_yet(monkeypatch):
-    monkeypatch.setattr(
-        state_module, "INVESTIGATORS", ("claimcheck", "provenance")
-    )
+    monkeypatch.setattr(state_module, "INVESTIGATORS", ("claimcheck", "provenance"))
     case = _Case(status="investigating", expected=["claimcheck", "provenance"])
     runs = [_Run("claimcheck", "done")]  # provenance row not created yet
     session = _make_session(case, runs)
