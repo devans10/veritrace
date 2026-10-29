@@ -94,6 +94,9 @@ class Case(Base):
     archive_opt_out: Mapped[bool] = mapped_column(Boolean, default=False)
     error: Mapped[str | None] = mapped_column(Text)
     cache_key: Mapped[str | None] = mapped_column(String(64))
+    # Snapshot of state.INVESTIGATORS at the moment fan_out ran, so a release
+    # that grows the investigator list doesn't strand mid-flight cases.
+    expected_investigators: Mapped[list[Any] | None] = mapped_column(nullable=True)
 
     captures: Mapped[list[Capture]] = relationship(
         back_populates="case", order_by="Capture.fetched_at"
@@ -207,6 +210,8 @@ class EvidenceItem(Base):
     __tablename__ = "evidence_items"
     __table_args__ = (
         CheckConstraint(_in("direction", DIRECTIONS), name="ck_evidence_direction"),
+        CheckConstraint("strength BETWEEN 0 AND 1", name="ck_evidence_strength"),
+        CheckConstraint("confidence BETWEEN 0 AND 1", name="ck_evidence_confidence"),
         Index("ix_evidence_case", "case_id"),
     )
 
@@ -260,6 +265,7 @@ class Score(Base):
     __table_args__ = (
         CheckConstraint(_in("band", BANDS), name="ck_scores_band"),
         CheckConstraint(_in("confidence_level", CONFIDENCE_LEVELS), name="ck_scores_confidence"),
+        Index("uq_scores_case_id", "case_id", unique=True),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
