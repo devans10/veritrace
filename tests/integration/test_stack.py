@@ -105,6 +105,13 @@ def test_audit_chain_for_case():
     assert "report.built" in events
     assert events[-1] == "stage.transition"
 
+    # The fan-out audit entry snapshots the investigator list so a future
+    # release that grows INVESTIGATORS doesn't strand mid-flight cases.
+    fan_out = next(e for e in d["entries"] if e["event_type"] == "investigators.fan_out")
+    assert sorted(fan_out["payload"]["expected_investigators"]) == sorted(
+        ["claimcheck", "provenance", "source", "corroboration", "media"]
+    )
+
 
 def test_full_dod_url_case_produces_report():
     """The v0.1 definition of done: submit a URL, get a report with a band,

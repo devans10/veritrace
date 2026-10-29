@@ -90,13 +90,21 @@ def advance(session: Session, case_id: uuid.UUID, finished: str) -> str | None:
 
 
 def advance_investigation(session: Session, case_id: uuid.UUID) -> str | None:
-    """Called after each investigator run finishes. If every expected run is terminal,
-    moves the case from 'investigating' to 'scoring'. Idempotent under row lock."""
+    """Called after each investigator run finishes. If every expected run is
+    terminal, moves the case from 'investigating' to 'scoring'.
+
+    The expected-investigator set is read from ``cases.expected_investigators``
+    — a per-case snapshot taken at fan-out time — rather than ``INVESTIGATORS``,
+    so a release that grows the investigator list can't strand mid-flight
+    cases waiting for a run that was never created. Pre-migration cases
+    (NULL column) fall back to today's ``INVESTIGATORS`` for compatibility.
+    """
     case = session.get(Case, case_id, with_for_update=True)
     if case is None or case.status != "investigating":
         return None
     runs = session.query(InvestigatorRun).filter(InvestigatorRun.case_id == case_id).all()
-    expected = set(INVESTIGATORS)
+    snapshot = case.expected_investigators
+    expected = set(snapshot) if snapshot else set(INVESTIGATORS)
     present = {r.investigator: r.status for r in runs}
     if not expected.issubset(present.keys()):
         return None
@@ -110,6 +118,7 @@ def advance_investigation(session: Session, case_id: uuid.UUID) -> str | None:
             "from": "investigating",
             "to": "scoring",
             "runs": {inv: present[inv] for inv in expected},
+            "expected_investigators": sorted(expected),
         },
         case_id=case_id,
     )

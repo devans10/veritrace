@@ -31,8 +31,14 @@ def run_fan_out(case_id: uuid.UUID, providers: Providers) -> None:
             r.investigator
             for r in s.query(InvestigatorRun).filter(InvestigatorRun.case_id == case_id).all()
         }
+        # First time we fan out for this case, snapshot the investigator list
+        # so advance_investigation can wait on exactly this set — even if a
+        # future release grows state.INVESTIGATORS mid-pipeline.
+        if case.expected_investigators is None:
+            case.expected_investigators = list(state.INVESTIGATORS)
+        expected = list(case.expected_investigators)
         created: list[tuple[str, uuid.UUID]] = []
-        for investigator in state.INVESTIGATORS:
+        for investigator in expected:
             if investigator in existing:
                 continue
             run = InvestigatorRun(
@@ -48,7 +54,12 @@ def run_fan_out(case_id: uuid.UUID, providers: Providers) -> None:
             audit.append(
                 s,
                 "investigators.fan_out",
-                {"created": [{"investigator": inv, "run_id": str(rid)} for inv, rid in created]},
+                {
+                    "created": [
+                        {"investigator": inv, "run_id": str(rid)} for inv, rid in created
+                    ],
+                    "expected_investigators": expected,
+                },
                 case_id=case_id,
             )
 
