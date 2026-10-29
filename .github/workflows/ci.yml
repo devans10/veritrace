@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "build/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint + types + unit tests + eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.9.8"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Pin Python
+        run: uv python install 3.12
+
+      - name: Install dependencies (all extras + dev)
+        run: uv sync --all-extras
+
+      - name: Lint
+        run: uv run ruff check src tests services migrations
+
+      - name: Format check
+        run: uv run ruff format --check src tests services
+
+      - name: Type check
+        run: uv run mypy
+
+      - name: Unit + contract tests
+        run: uv run pytest
+
+      - name: Tier A eval (safety gate — zero high_risk on corroborated / satire)
+        run: uv run python eval/run_eval.py
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: eval/results/
+          if-no-files-found: ignore
+          retention-days: 30
+
+    # Integration tests (make test-integration) deliberately omitted: they
+    # require the full docker compose stack (Postgres with pgvector, SeaweedFS,
+    # Redis, the sandboxed browser container, the Smokescreen egress proxy, and
+    # a fixture nginx on an exempted CIDR). GitHub-hosted runners can host
+    # Docker, but spinning up the stack + waiting for health takes 2-3 minutes
+    # before any test runs. Developers run them locally against `make up-dev`.
