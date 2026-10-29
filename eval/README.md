@@ -35,6 +35,10 @@ uv run python eval/run_eval.py
 The runner exits non-zero on a safety-gate failure (any high_risk on
 corroborated / satire cases). Band confusion is printed per-category.
 
+`eval/results/` is **gitignored** — the files it writes are per-run outputs,
+not fixtures. CI uploads them as artifacts; locally they are just left on
+disk for post-mortems.
+
 ## Adding cases
 
 Each `label.yaml` has this shape:
