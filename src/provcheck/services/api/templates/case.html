@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Case {{ case.id|string|truncate(8, true, "") }} — Provenance Check{% endblock %}
+{% block content %}
+<h1>Case <span class="mono">{{ case.id }}</span></h1>
+<p class="mute">
+  {{ case.input_type|capitalize }}
+  {% if case.input_url %} · <span class="mono">{{ case.input_url }}</span>{% endif %}
+  · created {{ case.created_at }}
+</p>
+
+{% if case.status not in ("complete", "failed") %}
+  {# Poll the status endpoint while the pipeline is still running. #}
+  <div id="status-area"
+       hx-get="/ui/cases/{{ case.id }}/fragment"
+       hx-trigger="load, every 2s"
+       hx-swap="outerHTML">
+    <p>Status: <span class="status {{ case.status }}">{{ case.status }}</span>…</p>
+  </div>
+{% else %}
+  {% include "_case_fragment.html" %}
+{% endif %}
+
+<footer class="mute" style="margin-top: 2rem;">
+  <a href="/v1/cases/{{ case.id }}/report.json">report.json</a> ·
+  <a href="/v1/cases/{{ case.id }}/audit">audit log</a>
+</footer>
+{% endblock %}

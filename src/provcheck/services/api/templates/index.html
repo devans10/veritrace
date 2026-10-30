@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Submit — Provenance Check{% endblock %}
+{% block content %}
+<h1>Provenance Check</h1>
+<p class="notice">
+  {{ disclaimer }}
+</p>
+
+<h2>Submit a URL</h2>
+<form method="post" action="/ui/submit-url">
+  <input type="text" name="url" placeholder="https://..." required>
+  <div class="row" style="margin-top: 0.5rem;">
+    <label><input type="checkbox" name="archive" checked> Save to the Internet Archive (makes the URL public)</label>
+    <button type="submit">Check</button>
+  </div>
+</form>
+
+<h2>Submit text</h2>
+<form method="post" action="/ui/submit-text">
+  <textarea name="text" placeholder="Paste a social post or an article snippet..." required></textarea>
+  <button type="submit" style="margin-top: 0.5rem;">Check</button>
+</form>
+
+<h2>Submit an image</h2>
+<form method="post" action="/ui/submit-upload" enctype="multipart/form-data">
+  <input type="file" name="file" accept="image/*,video/mp4" required>
+  <button type="submit" style="margin-top: 0.5rem;">Check</button>
+</form>
+{% endblock %}

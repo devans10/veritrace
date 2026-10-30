@@ -1,0 +1,21 @@
+category: satire
+expected_band: uncertain
+rationale: >
+  Known satirical publication (The Onion). Satire alone must NOT produce a
+  high_risk band — the Satire category is called out, but the report says
+  "originates from a known satirical source" rather than "fabricated". The
+  safety gate asserts zero high_risk on satire.
+evidence:
+  - investigator: source
+    signal: source.satire_domain
+    direction: neutral
+    strength: 1.0
+    confidence: 0.9
+    category_hint: satire
+    finding: "theonion.com is a known satirical publication."
+  - investigator: provenance
+    signal: provenance.archive_earliest
+    direction: neutral
+    strength: 0.4
+    confidence: 0.8
+    finding: "Earliest Wayback capture of this URL is 2017-02-18."

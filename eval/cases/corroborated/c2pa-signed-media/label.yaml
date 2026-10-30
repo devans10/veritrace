@@ -1,0 +1,25 @@
+category: corroborated
+expected_band: low_risk
+rationale: >
+  Image carries a valid C2PA manifest (Content Credentials) and the source
+  domain is reputable. C2PA + reputation together push the band to low_risk.
+evidence:
+  - investigator: media
+    signal: media.c2pa_valid
+    direction: supports
+    strength: 0.9
+    confidence: 0.9
+    category_hint: corroborated
+    finding: "C2PA manifest is valid (1 record)."
+  - investigator: source
+    signal: source.reputable_outlet
+    direction: supports
+    strength: 0.6
+    confidence: 0.8
+    finding: "nytimes.com is on the reputation list."
+  - investigator: corroboration
+    signal: corroboration.independent_outlets
+    direction: supports
+    strength: 0.6
+    confidence: 0.8
+    finding: "2 independent outlets reporting the same photo."

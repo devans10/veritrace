@@ -1,0 +1,27 @@
+category: corroborated
+expected_band: low_risk
+rationale: >
+  A wire service (AP) plus multiple reputable outlets independently reporting
+  the same story. Reputable-outlet source match adds a weak supports; the
+  independent-outlets signal is the main lift.
+evidence:
+  - investigator: source
+    signal: source.reputable_outlet
+    direction: supports
+    strength: 0.6
+    confidence: 0.9
+    category_hint: corroborated
+    finding: "apnews.com is on the reputation list (wire)."
+  - investigator: corroboration
+    signal: corroboration.independent_outlets
+    direction: supports
+    strength: 0.9
+    confidence: 0.9
+    category_hint: corroborated
+    finding: "5 independent reputable outlets reporting on this."
+  - investigator: source
+    signal: source.domain_age_established
+    direction: supports
+    strength: 0.4
+    confidence: 0.8
+    finding: "apnews.com registered >25 years ago."

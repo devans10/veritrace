@@ -1,0 +1,21 @@
+category: satire
+expected_band: uncertain
+rationale: >
+  Satire site plus the article is picked up by one reputable outlet that
+  reports on it as a joke. The reputable-outlet signal is weak corroboration
+  that the SITE is real; it does NOT corroborate the CLAIM. The safety gate
+  still forbids high_risk on satire.
+evidence:
+  - investigator: source
+    signal: source.satire_domain
+    direction: neutral
+    strength: 1.0
+    confidence: 0.9
+    category_hint: satire
+    finding: "babylonbee.com is a known satirical publication."
+  - investigator: source
+    signal: source.domain_age_established
+    direction: supports
+    strength: 0.3
+    confidence: 0.8
+    finding: "babylonbee.com registered >5 years ago."

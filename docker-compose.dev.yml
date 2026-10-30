@@ -1,0 +1,97 @@
+# DEV/TEST ONLY overlay: adds a fixture website on a private subnet and exempts that
+# one subnet from SSRF blocking, plus localhost-only debug ports for tests on the host.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build --wait
+# Never use this file in production (ENV=production refuses SSRF_ALLOW_CIDRS).
+
+x-fixture-allow: &fixture-allow
+  SSRF_ALLOW_CIDRS: 172.31.250.0/24
+
+# In the dev/test stack we substitute in-process fakes for the LLM, embeddings,
+# and fact-check so integration tests don't need keys and don't hit the network.
+x-fakes-env: &fakes-env
+  LLM_PROVIDER: fake
+  EMBED_PROVIDER: fake
+  EMBED_DIM: 32
+  SEARCH_PROVIDER: none
+  FACTCHECK_PROVIDER: none
+
+services:
+  fixture-site:
+    image: nginx:1.28-alpine
+    volumes:
+      - ./tests/fixtures/site:/usr/share/nginx/html:ro
+      - ./tests/fixtures/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      fixtures: { ipv4_address: 172.31.250.10 }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 5s
+      retries: 10
+
+  egress-proxy:
+    command:
+      - --listen-ip=0.0.0.0
+      - --listen-port=4750
+      - --allow-range=172.31.250.0/24
+      - --deny-range=100.64.0.0/10
+      - --deny-range=169.254.0.0/16
+      - --deny-range=fc00::/7
+    networks: [sandbox, backend, egress, fixtures]
+
+  api:
+    environment:
+      <<: [*fixture-allow, *fakes-env]
+    networks: [backend, frontend, fixtures]
+
+  worker-capture:
+    environment:
+      <<: [*fixture-allow, *fakes-env]
+    networks: [backend, sandbox, egress, fixtures]
+
+  worker-extract:
+    environment:
+      <<: *fakes-env
+
+  worker-claimcheck:
+    environment:
+      <<: *fakes-env
+
+  worker-provenance:
+    environment:
+      <<: *fakes-env
+
+  worker-source:
+    environment:
+      <<: *fakes-env
+
+  worker-corroboration:
+    environment:
+      <<: *fakes-env
+
+  worker-media:
+    environment:
+      <<: [*fixture-allow, *fakes-env]
+    networks: [backend, egress, fixtures]
+
+  worker-scoring:
+    environment:
+      <<: *fakes-env
+
+  postgres:
+    ports: ["127.0.0.1:55432:5432"]
+    networks: [backend, devports]
+
+  redis:
+    ports: ["127.0.0.1:56379:6379"]
+    networks: [backend, devports]
+
+  seaweedfs:
+    ports: ["127.0.0.1:58333:8333"]
+    networks: [backend, devports]
+
+networks:
+  fixtures:
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.250.0/24 }]
+  devports: {}

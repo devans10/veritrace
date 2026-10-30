@@ -1,0 +1,26 @@
+category: corroborated
+expected_band: low_risk
+rationale: >
+  A ClaimReview-rated-true article from a reputable domain, with multiple
+  independent outlets also reporting. The claim-check verdict dominates.
+evidence:
+  - investigator: claimcheck
+    signal: factcheck.claimreview_true
+    direction: supports
+    strength: 0.9
+    confidence: 0.8
+    category_hint: corroborated
+    finding: "PolitiFact rated this True."
+  - investigator: corroboration
+    signal: corroboration.independent_outlets
+    direction: supports
+    strength: 0.7
+    confidence: 0.8
+    category_hint: corroborated
+    finding: "3 independent reputable outlets covering it."
+  - investigator: source
+    signal: source.reputable_outlet
+    direction: supports
+    strength: 0.6
+    confidence: 0.8
+    finding: "reuters.com is on the reputation list."

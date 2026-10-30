@@ -1,0 +1,314 @@
+# Provenance Check — full local stack.
+#   cp .env.example .env   (or: make env, which generates random secrets)
+#   docker compose up -d --build
+#
+# Networks:
+#   backend  (internal)  app services + data stores; no internet
+#   sandbox  (internal)  browser <-> egress-proxy <-> worker-capture only
+#   egress   (bridge)    internet access for the proxy and for *trusted* provider calls
+#   frontend (bridge)    published API port
+
+name: provcheck
+
+x-app-env: &app-env
+  ENV: ${ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DB_HOST: postgres
+  DB_NAME: provcheck
+  DB_USER: provcheck_app
+  DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+  DB_OWNER_USER: provcheck_owner
+  DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:?set DB_OWNER_PASSWORD in .env}
+  QUEUE: rq
+  REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+  OBJECT_STORE: s3
+  S3_ENDPOINT: seaweedfs:8333
+  S3_BUCKET: provcheck
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
+  BROWSER_URL: http://browser:3000
+  EGRESS_PROXY_URL: http://egress-proxy:4750
+  ARCHIVE_PROVIDER: ${ARCHIVE_PROVIDER:-wayback}
+  ARCHIVE_SAVE_ENABLED: ${ARCHIVE_SAVE_ENABLED:-true}
+  IA_S3_ACCESS_KEY: ${IA_S3_ACCESS_KEY:-}
+  IA_S3_SECRET_KEY: ${IA_S3_SECRET_KEY:-}
+  LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+  LLM_PROMPT_CACHE: ${LLM_PROMPT_CACHE:-true}
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  LLM_MODEL: ${LLM_MODEL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  EMBED_PROVIDER: ${EMBED_PROVIDER:-voyage}
+  EMBED_MODEL: ${EMBED_MODEL:-voyage-3}
+  EMBED_DIM: ${EMBED_DIM:-1024}
+  VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+  SEARCH_PROVIDER: ${SEARCH_PROVIDER:-searxng}
+  SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
+  FACTCHECK_PROVIDER: ${FACTCHECK_PROVIDER:-none}
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+
+x-app: &app
+  image: provcheck-app:${TAG:-dev}
+  build: { context: ., dockerfile: docker/Dockerfile.app }
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  depends_on: &app-deps
+    migrate: { condition: service_completed_successfully }
+    redis: { condition: service_healthy }
+    seaweedfs: { condition: service_healthy }
+
+x-worker-health: &worker-health
+  test: ["CMD", "python", "-m", "provcheck.services.worker.healthcheck"]
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg16-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: provcheck_owner
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD}
+      POSTGRES_DB: provcheck
+      APP_DB_USER: provcheck_app
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U provcheck_owner -d provcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [backend]
+
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks: [backend]
+
+  seaweedfs:
+    # S3-compatible object store (Apache-2.0). Credentials are written from env at start.
+    image: chrislusf/seaweedfs:4.48
+    restart: unless-stopped
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+    entrypoint: ["/bin/sh", "/opt/provcheck/seaweedfs-entrypoint.sh"]
+    volumes:
+      - seaweeddata:/data
+      - ./docker/seaweedfs/entrypoint.sh:/opt/provcheck/seaweedfs-entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    networks: [backend]
+
+  egress-proxy:
+    image: provcheck-egress:${TAG:-dev}
+    build: { context: ., dockerfile: docker/Dockerfile.egress }
+    restart: unless-stopped
+    command:
+      - --listen-ip=0.0.0.0
+      - --listen-port=4750
+      # Belt and braces on top of Smokescreen's built-in private-range blocking.
+      - --deny-range=100.64.0.0/10
+      - --deny-range=192.0.0.0/24
+      - --deny-range=198.18.0.0/15
+      - --deny-range=169.254.0.0/16
+      - --deny-range=fc00::/7
+      - --deny-range=fe80::/10
+      - --deny-range=64:ff9b::/96
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/4750"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [sandbox, backend, egress]
+
+  browser:
+    image: provcheck-browser:${TAG:-dev}
+    build: { context: ., dockerfile: docker/Dockerfile.browser }
+    restart: unless-stopped
+    environment:
+      EGRESS_PROXY_URL: http://egress-proxy:4750
+      BROWSER_MAX_CONCURRENCY: "2"
+    user: pwuser
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+      - /home/pwuser:size=256m,uid=1001,gid=1001
+    shm_size: 512m
+    ipc: private
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./docker/browser/seccomp_profile.json
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    depends_on:
+      egress-proxy: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/healthz',timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [sandbox]
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["sh", "-c", "alembic upgrade head && provcheck-admin init-storage"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: migrate
+    depends_on:
+      postgres: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
+    networks: [backend]
+
+  api:
+    <<: *app
+    environment:
+      <<: *app-env
+      SERVICE_NAME: api
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [backend, frontend]
+
+  orchestrator:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: orchestrator
+      WORKER_QUEUES: orchestrator
+    healthcheck: *worker-health
+    networks: [backend]
+
+  worker-capture:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-capture
+      WORKER_QUEUES: capture
+    depends_on:
+      <<: *app-deps
+      browser: { condition: service_healthy }
+    healthcheck: *worker-health
+    networks: [backend, sandbox, egress]
+
+  worker-extract:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-extract
+      WORKER_QUEUES: extract
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-claimcheck:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-claimcheck
+      WORKER_QUEUES: claimcheck
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-provenance:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-provenance
+      WORKER_QUEUES: provenance
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-source:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-source
+      WORKER_QUEUES: source
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-corroboration:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-corroboration
+      WORKER_QUEUES: corroboration
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-media:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-media
+      WORKER_QUEUES: media
+    depends_on:
+      <<: *app-deps
+      egress-proxy: { condition: service_healthy }
+    healthcheck: *worker-health
+    networks: [backend, egress]
+
+  worker-scoring:
+    <<: *app
+    command: ["python", "-m", "provcheck.services.worker"]
+    environment:
+      <<: *app-env
+      SERVICE_NAME: worker-scoring
+      WORKER_QUEUES: scoring
+    healthcheck: *worker-health
+    networks: [backend]
+
+volumes:
+  pgdata:
+  redisdata:
+  seaweeddata:
+
+networks:
+  backend:
+    internal: true
+  sandbox:
+    internal: true
+  egress: {}
+  frontend: {}

@@ -1,0 +1,21 @@
+category: misleading_context
+expected_band: uncertain
+rationale: >
+  Visually-similar image previously captured on a different page; combined
+  with provenance.earliest_appearance from an older copy of the text. Not
+  fabricated (image is real), but the context has shifted.
+evidence:
+  - investigator: provenance
+    signal: provenance.earlier_copy
+    direction: undermines
+    strength: 0.5
+    confidence: 0.6
+    category_hint: misleading_context
+    finding: "Visually-similar image seen previously on another page."
+  - investigator: provenance
+    signal: provenance.earliest_appearance
+    direction: undermines
+    strength: 0.6
+    confidence: 0.6
+    category_hint: misleading_context
+    finding: "Earlier copy of the exact text from 2024."

@@ -1,0 +1,85 @@
+"""Fixed task registry. RQ jobs always call ``dispatch``; payloads only carry data."""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Callable
+from typing import Any
+
+from provcheck.core.investigators.claimcheck import run_claimcheck
+from provcheck.core.investigators.corroboration import run_corroboration
+from provcheck.core.investigators.media import run_media
+from provcheck.core.investigators.provenance import run_provenance
+from provcheck.core.investigators.source import run_source
+from provcheck.core.pipeline.capture import run_archive_poll, run_capture
+from provcheck.core.pipeline.extract import run_extract
+from provcheck.core.pipeline.orchestrator import run_fan_out
+from provcheck.core.pipeline.scoring_stage import run_score
+from provcheck.core.providers.registry import get_providers
+
+
+def _capture(p: dict[str, Any]) -> None:
+    run_capture(uuid.UUID(p["case_id"]), get_providers())
+
+
+def _archive_poll(p: dict[str, Any]) -> None:
+    run_archive_poll(uuid.UUID(p["case_id"]), uuid.UUID(p["capture_id"]), get_providers())
+
+
+def _extract(p: dict[str, Any]) -> None:
+    run_extract(uuid.UUID(p["case_id"]), get_providers())
+
+
+def _fan_out(p: dict[str, Any]) -> None:
+    run_fan_out(uuid.UUID(p["case_id"]), get_providers())
+
+
+def _claimcheck(p: dict[str, Any]) -> None:
+    run_claimcheck(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
+def _provenance(p: dict[str, Any]) -> None:
+    run_provenance(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
+def _source(p: dict[str, Any]) -> None:
+    run_source(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
+def _corroboration(p: dict[str, Any]) -> None:
+    run_corroboration(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
+def _media(p: dict[str, Any]) -> None:
+    run_media(uuid.UUID(p["case_id"]), uuid.UUID(p["run_id"]), get_providers())
+
+
+def _score(p: dict[str, Any]) -> None:
+    run_score(uuid.UUID(p["case_id"]), get_providers())
+
+
+TASKS: dict[str, Callable[[dict[str, Any]], None]] = {
+    "pipeline.capture": _capture,
+    "pipeline.archive_poll": _archive_poll,
+    "pipeline.extract": _extract,
+    "pipeline.fan_out": _fan_out,
+    "pipeline.score": _score,
+    "investigator.claimcheck": _claimcheck,
+    "investigator.provenance": _provenance,
+    "investigator.source": _source,
+    "investigator.corroboration": _corroboration,
+    "investigator.media": _media,
+}
+
+
+def run_task(task: str, payload: dict[str, Any]) -> None:
+    try:
+        fn = TASKS[task]
+    except KeyError:
+        raise ValueError(f"unknown task {task!r}") from None
+    fn(payload)
+
+
+def dispatch(task: str, payload: dict[str, Any]) -> None:
+    """RQ entrypoint."""
+    run_task(task, payload)

@@ -1,0 +1,114 @@
+{# Rendered body for a terminal case (complete | failed). #}
+<div id="status-area">
+<p>Status:
+  <span class="status {{ case.status }}">{{ case.status }}</span>
+  {% if case.error %} <span class="mute">{{ case.error }}</span>{% endif %}
+</p>
+
+{% if report %}
+  <h2>Assessment</h2>
+  <p>
+    Band: <span class="band {{ report.assessment.band }}">{{ report.assessment.band|replace("_", " ") }}</span>
+    &nbsp;·&nbsp; Confidence: <strong>{{ report.assessment.confidence_level }}</strong>
+    <br>
+    <span class="mute">Scorer {{ report.assessment.scorer_version }} · config {{ report.assessment.config_sha256[:12] }}</span>
+  </p>
+
+  {% if report.categories %}
+    <h2>Categories</h2>
+    <div class="cards">
+      {% for cat in report.categories %}
+        <div class="card">
+          <div class="num">{{ "%.2f"|format(cat.total_abs) }}</div>
+          <div>{{ cat.category|replace("_", " ") }}</div>
+          <div class="mute">{{ cat.evidence_ids|length }} evidence item(s)</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <h2>Evidence trail</h2>
+  {% if report.evidence_by_investigator %}
+    {% for investigator, items in report.evidence_by_investigator.items() %}
+      <h3>{{ investigator }}</h3>
+      {% for ev in items %}
+        <div class="evidence">
+          <span class="dir {{ ev.direction }}">{{ ev.direction }}</span>
+          <strong>{{ ev.signal }}</strong>
+          <span class="mute">strength {{ "%.2f"|format(ev.strength) }} · confidence {{ "%.2f"|format(ev.confidence) }}</span>
+          <div>{{ ev.finding }}</div>
+          {% if ev.source_url %}
+            <div class="mute">source: <a href="{{ ev.source_url }}" rel="noreferrer" target="_blank">{{ ev.source_url }}</a></div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% endfor %}
+  {% else %}
+    <p class="mute">No evidence produced for this case.</p>
+  {% endif %}
+
+  <h2>Could not verify</h2>
+  {% set unverified_total = 0 %}
+  {% for inv, items in report.unverified_by_investigator.items() %}{% set unverified_total = unverified_total + items|length %}{% endfor %}
+  {% if unverified_total == 0 %}
+    <p class="mute">Nothing on the could-not-verify list — unusual; check the audit log.</p>
+  {% else %}
+    {% for investigator, items in report.unverified_by_investigator.items() %}
+      <details>
+        <summary>{{ investigator }} ({{ items|length }})</summary>
+        <ul class="unverified">
+          {% for u in items %}
+            <li><strong>{{ u.reason }}</strong>: {{ u.subject }}{% if u.detail %} — <span class="mute">{{ u.detail }}</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    {% endfor %}
+  {% endif %}
+
+  {% if report.claims %}
+    <h2>Extracted claims</h2>
+    <ul>
+      {% for c in report.claims %}
+        <li>
+          <strong>{{ c.text }}</strong>
+          <div class="mute mono">source span: “{{ c.source_span|truncate(140) }}”</div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if report.captures %}
+    <h2>Capture</h2>
+    {% for cap in report.captures %}
+      <p>
+        Final URL: <span class="mono">{{ cap.final_url }}</span>
+        {% if cap.title %} · <strong>{{ cap.title }}</strong>{% endif %}
+        <br>
+        <span class="mute">Fetched {{ cap.fetched_at }} · HTTP {{ cap.http_status }}
+          · {{ cap.blocked_requests }} blocked subresource(s){% if cap.truncated %} · truncated{% endif %}</span>
+        <br>
+        Archive: <strong>{{ cap.archive.status }}</strong>
+        {% if cap.archive.url %} · <a href="{{ cap.archive.url }}" rel="noreferrer" target="_blank">{{ cap.archive.url }}</a>{% endif %}
+      </p>
+      <ul>
+        {% for a in cap.artifacts %}
+          <li><a href="{{ a.href }}">{{ a.kind }}</a> <span class="mute mono">sha256 {{ a.sha256[:16] }}…</span></li>
+        {% endfor %}
+      </ul>
+    {% endfor %}
+  {% endif %}
+
+  {% if report.ela_artifacts %}
+    <h3>ELA diffs <span class="mute">(informational, not scored)</span></h3>
+    <ul>
+      {% for a in report.ela_artifacts %}
+        <li><a href="{{ a.href }}">ELA diff</a> <span class="mute mono">sha256 {{ a.sha256[:16] }}…</span></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% elif case.status == "failed" %}
+  <p>No report produced; the case failed before scoring.</p>
+{% else %}
+  <p class="mute">Report not available yet.</p>
+{% endif %}
+</div>

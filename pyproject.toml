@@ -1,0 +1,105 @@
+[project]
+name = "provcheck"
+version = "0.1.0"
+description = "Provenance Check: local-first content verification (credibility assessment, not verdicts)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+dependencies = [
+    "alembic>=1.14",
+    "anthropic>=0.69",
+    "c2pa-python>=0.38,!=0.38.2",  # 0.38.2 wheels dropped Linux (temporary)
+    "fastapi>=0.115",
+    "filetype>=1.2",
+    "httpx>=0.28",
+    "imagehash>=4.3",
+    "jinja2>=3.1",
+    "minio>=7.2",
+    "pgvector>=0.3",
+    "pillow>=11.0",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-multipart>=0.0.12",
+    "pyyaml>=6.0",
+    "redis>=5.2",
+    "rq>=2.0",
+    "selectolax>=0.3",
+    "sqlalchemy>=2.0.36",
+    "tldextract>=5.1",
+    "uvicorn[standard]>=0.32",
+    "voyageai>=0.3",
+]
+
+[project.optional-dependencies]
+local-embed = ["sentence-transformers>=3.3"]
+
+[project.scripts]
+provcheck-admin = "provcheck.admin:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/provcheck"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.File"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"migrations/**" = ["E501", "S608"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["provcheck"]
+mypy_path = "src"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "rq.*",
+    "minio.*",
+    "voyageai.*",
+    "sentence_transformers.*",
+    "pgvector.*",
+    "imagehash.*",
+    "tldextract.*",
+    "selectolax.*",
+    "c2pa.*",
+    "filetype.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-m 'not integration and not live' --strict-markers"
+markers = [
+  "integration: needs the docker compose stack (make up-dev)",
+  "live: hits real external services; needs keys",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.115",
+    "mypy>=1.13",
+    "piexif>=1.1.3",
+    "psycopg[binary]>=3.3.6",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "ruff>=0.8",
+    "types-pyyaml>=6.0",
+]

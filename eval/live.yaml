@@ -1,0 +1,8 @@
+# Tier B — live URLs with labels taken from published fact-checks. Run on
+# demand against the full stack with real API keys; not part of CI. Each
+# entry: {url, category, expected_band, label_source}.
+#
+# Deliberately empty in v0.1 — authoring Tier B requires auditing current
+# ClaimReview records for URLs that will remain live. Populate when the
+# evaluation set calibration phase begins.
+cases: []
